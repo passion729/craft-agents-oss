@@ -92,37 +92,6 @@ import {
 // ============================================================================
 
 /**
- * Simple markdown stripping for preview text.
- * Removes markdown syntax to show plain text preview.
- * Code block content is preserved as plain text.
- */
-function stripMarkdown(text: string): string {
-  return text
-    // Extract content from fenced code blocks (remove ``` and optional language)
-    .replace(/```(?:\w+)?\n?([\s\S]*?)```/g, '$1')
-    // Extract content from inline code
-    .replace(/`([^`]+)`/g, '$1')
-    // Remove headers
-    .replace(/^#{1,6}\s+/gm, '')
-    // Remove bold/italic
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/_([^_]+)_/g, '$1')
-    // Remove links
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    // Remove images
-    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
-    // Remove blockquotes
-    .replace(/^>\s+/gm, '')
-    // Remove horizontal rules
-    .replace(/^---+$/gm, '')
-    // Collapse whitespace
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/**
  * Compute diff stats for Edit/Write tool inputs.
  * Uses @pierre/diffs for accurate line-by-line diff calculation.
  *
@@ -894,29 +863,44 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
   const depth = activity.depth || 0
 
   // Intermediate messages (LLM commentary) - render with dashed circle icon
-  // Show "Thinking" while streaming, stripped markdown content when complete
+  // Show streaming text when available; fallback to "Thinking..." while empty
   if (activity.type === 'intermediate') {
     const isThinking = activity.status === 'running'
-    const displayContent = isThinking ? 'Thinking...' : stripMarkdown(activity.content || '')
+    const markdownContent = (activity.content || '').trim()
+    const hasStreamingContent = markdownContent.length > 0
     const isComplete = activity.status === 'completed'
     return (
       <div className="flex items-stretch">
         <TreeViewConnector depth={depth} isLastChild={isLastChild} />
         <div
           className={cn(
-            "group/row flex items-center gap-2 py-0.5 text-foreground/75 flex-1 min-w-0",
+            "group/row flex items-start gap-2 py-0.5 text-foreground/75 flex-1 min-w-0",
             SIZE_CONFIG.fontSize
           )}
           onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
         >
           {isThinking ? (
-            <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
+            <div className={cn(SIZE_CONFIG.iconSize, "mt-0.5 flex items-center justify-center shrink-0")}>
               <Spinner className={SIZE_CONFIG.spinnerSize} />
             </div>
           ) : (
-            <MessageCircleDashed className={cn(SIZE_CONFIG.iconSize, "shrink-0")} />
+            <MessageCircleDashed className={cn(SIZE_CONFIG.iconSize, "mt-0.5 shrink-0")} />
           )}
-          <span className={cn("truncate flex-1", onOpenDetails && isComplete && "group-hover/row:underline")}>{displayContent}</span>
+          <div className="flex-1 min-w-0 text-left break-words [overflow-wrap:anywhere]">
+            {hasStreamingContent ? (
+              <Markdown
+                mode="minimal"
+                className={cn(
+                  "[&_p]:my-0 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:my-1 [&_blockquote]:my-1 [&_h1]:my-1 [&_h2]:my-1 [&_h3]:my-1",
+                  onOpenDetails && isComplete && "group-hover/row:underline"
+                )}
+              >
+                {markdownContent}
+              </Markdown>
+            ) : (
+              <span className="truncate">Thinking...</span>
+            )}
+          </div>
           {/* Open details button */}
           {onOpenDetails && isComplete && (
             <div
@@ -933,7 +917,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
                 }
               }}
               className={cn(
-                "p-0.5 rounded-[3px] opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0",
+                "mt-0.5 p-0.5 rounded-[3px] opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0",
                 "hover:bg-muted/80 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               )}
             >
