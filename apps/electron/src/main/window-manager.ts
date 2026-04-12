@@ -3,6 +3,7 @@ import { windowLog } from './logger'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { release } from 'os'
+import { getWindowZoomFactor, setWindowZoomFactor } from '@craft-agent/shared/config'
 import { RPC_CHANNELS, type WindowCloseRequestSource } from '../shared/types'
 import type { SavedWindow } from './window-state'
 
@@ -169,6 +170,19 @@ export class WindowManager {
         sandbox: false,
         webviewTag: false // Browser integration uses WebContentsView, not <webview>
       }
+    })
+
+    const initialZoomFactor = getWindowZoomFactor()
+    window.webContents.setZoomFactor(initialZoomFactor)
+    window.webContents.once('did-finish-load', () => {
+      if (window.isDestroyed() || window.webContents.isDestroyed()) return
+      window.webContents.setZoomFactor(getWindowZoomFactor())
+    })
+    window.webContents.on('zoom-changed', () => {
+      setTimeout(() => {
+        if (window.isDestroyed() || window.webContents.isDestroyed()) return
+        setWindowZoomFactor(window.webContents.getZoomFactor())
+      }, 0)
     })
 
     // Show window when first paint is ready (faster perceived startup)
@@ -343,6 +357,10 @@ export class WindowManager {
     // Handle window close request (traffic-light button, menu close, Cmd/Ctrl+W)
     // and send source metadata so renderer can decide layered dismiss vs direct close.
     window.on('close', (event) => {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        setWindowZoomFactor(window.webContents.getZoomFactor())
+      }
+
       // During app quit, bypass layered close behavior and allow native close flow.
       // This preserves expected Cmd+Q semantics (quit app instead of closing overlays/panels first).
       if (this.isAppQuitting) {
