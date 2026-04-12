@@ -167,20 +167,30 @@ export function updateBadgeCount(count: number): void {
 }
 
 /**
- * Update badge count on macOS using dock icon overlay
+ * Update badge count on macOS.
+ *
+ * - Packaged app: uses dock text badge only (preserves appearance-aware bundle icon).
+ * - Dev mode: uses dock icon overlay for clearer local debugging.
  */
 function updateBadgeCountMacOS(count: number): void {
   try {
-    if (count > 0) {
-      // Draw badge onto icon using the renderer process (Canvas API)
-      if (eventSink && baseIconDataUrl) {
-        eventSink(RPC_CHANNELS.badge.DRAW, { to: 'all' }, { count, iconDataUrl: baseIconDataUrl })
-      }
+    // In packaged macOS builds, keep bundle-provided Dock icon so Tahoe/appearance
+    // variants work. Use text badge only to avoid overriding icon assets at runtime.
+    if (app.isPackaged) {
+      app.dock?.setBadge(count > 0 ? String(count) : '')
     } else {
-      // Reset to original icon (no badge)
-      if (baseIconPath) {
-        const originalIcon = nativeImage.createFromPath(baseIconPath)
-        app.dock?.setIcon(originalIcon)
+      // Dev mode: no app bundle icon metadata, keep canvas overlay behavior.
+      if (count > 0) {
+        // Draw badge onto icon using the renderer process (Canvas API)
+        if (eventSink && baseIconDataUrl) {
+          eventSink(RPC_CHANNELS.badge.DRAW, { to: 'all' }, { count, iconDataUrl: baseIconDataUrl })
+        }
+      } else {
+        // Reset to original icon (no badge)
+        if (baseIconPath) {
+          const originalIcon = nativeImage.createFromPath(baseIconPath)
+          app.dock?.setIcon(originalIcon)
+        }
       }
     }
     mainLog.info('Badge count updated (macOS):', count)
@@ -236,6 +246,8 @@ export function setDockIconWithBadge(dataUrl: string): void {
     const icon = nativeImage.createFromDataURL(dataUrl)
 
     if (process.platform === 'darwin') {
+      // Keep packaged macOS dock icon managed by bundle assets (appearance-aware).
+      if (app.isPackaged) return
       app.dock?.setIcon(icon)
       mainLog.info('Dock icon updated with badge (macOS)')
     } else if (process.platform === 'win32') {

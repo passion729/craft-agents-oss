@@ -194,6 +194,22 @@ let moduleClientResolver: ((webContentsId: number) => string | undefined) | null
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
 
+/**
+ * Resolve a PNG icon path for dock badge rendering.
+ *
+ * In packaged macOS builds we avoid setting the dock icon directly so the app bundle
+ * can provide appearance-aware icons (Assets.car / icon.icns). We still need a PNG
+ * base image for canvas badge rendering.
+ */
+function resolveMacDockBadgeBaseIconPath(): string | null {
+  const candidates = [
+    join(__dirname, 'resources/icon.png'),
+    join(__dirname, '../resources/icon.png'),
+  ]
+
+  return candidates.find(p => existsSync(p)) ?? null
+}
+
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
 app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')
@@ -396,20 +412,24 @@ app.whenReady().then(async () => {
 
   // Application menu is created after windowManager initialization (see below)
 
-  // Set dock icon on macOS (required for dev mode, bundled apps use Info.plist)
+  // Configure dock icon/badge base on macOS.
   if (process.platform === 'darwin' && app.dock) {
-    // In packaged app, resources are at dist/resources/ (same level as __dirname)
-    // In dev, resources are at ../resources/ (sibling of dist/)
-    const dockIconPath = [
-      join(__dirname, 'resources/icon.png'),
-      join(__dirname, '../resources/icon.png'),
-    ].find(p => existsSync(p))
+    const applyMacDockAppearance = (): void => {
+      const dockIconPath = resolveMacDockBadgeBaseIconPath()
+      if (!dockIconPath) return
 
-    if (dockIconPath) {
-      app.dock.setIcon(dockIconPath)
-      // Initialize badge icon for canvas-based badge overlay
+      // Initialize badge icon for canvas-based badge overlay.
       initBadgeIcon(dockIconPath)
+
+      // In packaged builds, keep the bundle icon so macOS can apply appearance variants.
+      // In dev, set a concrete icon because there's no app bundle icon metadata.
+      if (!app.isPackaged) {
+        app.dock?.setIcon(dockIconPath)
+      }
     }
+
+    applyMacDockAppearance()
+    nativeTheme.on('updated', applyMacDockAppearance)
 
     // Multi-instance dev: show instance number badge on dock icon
     // CRAFT_INSTANCE_NUMBER is set by detect-instance.sh for numbered folders

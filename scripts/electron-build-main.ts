@@ -4,7 +4,7 @@
  */
 
 import { spawn } from "bun";
-import { existsSync, readFileSync, statSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, statSync, mkdirSync, copyFileSync, chmodSync } from "fs";
 import { join } from "path";
 
 const ROOT_DIR = join(import.meta.dir, "..");
@@ -17,6 +17,11 @@ const SESSION_SERVER_DIR = join(ROOT_DIR, "packages/session-mcp-server");
 const SESSION_SERVER_OUTPUT = join(SESSION_SERVER_DIR, "dist/index.js");
 const PI_AGENT_SERVER_DIR = join(ROOT_DIR, "packages/pi-agent-server");
 const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
+const BUNDLED_BUN_PATH = join(
+  ROOT_DIR,
+  "apps/electron/vendor/bun",
+  process.platform === "win32" ? "bun.exe" : "bun",
+);
 
 // Load .env file if it exists
 function loadEnvFile(): void {
@@ -131,6 +136,35 @@ function verifySessionToolsCore(): void {
   }
 
   console.log("✅ Session tools core verified");
+}
+
+/**
+ * Ensure a Bun runtime is bundled for packaged app subprocesses.
+ *
+ * Local `electron:dist:*` builds don't run the full release scripts that download
+ * a pinned Bun binary into apps/electron/vendor/bun/. In that case we fall back
+ * to copying the current Bun executable used to run this build.
+ */
+function ensureBundledBunRuntime(): void {
+  if (existsSync(BUNDLED_BUN_PATH)) {
+    return;
+  }
+
+  const bunExecutable = process.execPath;
+  if (!existsSync(bunExecutable)) {
+    console.error("❌ Bun executable not found at", bunExecutable);
+    process.exit(1);
+  }
+
+  console.log("📦 Bundling Bun runtime from", bunExecutable);
+  mkdirSync(join(ROOT_DIR, "apps/electron/vendor/bun"), { recursive: true });
+  copyFileSync(bunExecutable, BUNDLED_BUN_PATH);
+
+  if (process.platform !== "win32") {
+    chmodSync(BUNDLED_BUN_PATH, 0o755);
+  }
+
+  console.log("✅ Bundled Bun runtime at", BUNDLED_BUN_PATH);
 }
 
 // Build the unified network interceptor (bundled CJS loaded via --require into Node-based SDK subprocesses)
@@ -256,6 +290,7 @@ async function buildPiAgentServer(): Promise<void> {
 
 async function main(): Promise<void> {
   loadEnvFile();
+  ensureBundledBunRuntime();
 
   // Ensure dist directory exists
   if (!existsSync(DIST_DIR)) {
