@@ -22,6 +22,48 @@ interface ExpansionEntry {
 /** Full map stored in localStorage */
 type ExpansionMap = Record<string, ExpansionEntry>
 
+export type TurnKeyInput = string | readonly string[]
+
+/**
+ * Normalize one-or-many turn keys into a stable, deduplicated array.
+ * Empty values are dropped.
+ */
+export function normalizeTurnKeys(turnKeys: TurnKeyInput): string[] {
+  const keys = (Array.isArray(turnKeys) ? turnKeys : [turnKeys])
+    .map((key) => key.trim())
+    .filter((key) => key.length > 0)
+  return Array.from(new Set(keys))
+}
+
+/** Return true if any key alias is currently expanded. */
+export function hasExpandedTurnKey(expanded: ReadonlySet<string>, turnKeys: TurnKeyInput): boolean {
+  const aliases = normalizeTurnKeys(turnKeys)
+  return aliases.some((key) => expanded.has(key))
+}
+
+/**
+ * Apply an expanded/collapsed state to all aliases for a turn.
+ * This keeps fallback keys and final message-id keys synchronized.
+ */
+export function applyExpandedTurnKeys(
+  expanded: ReadonlySet<string>,
+  turnKeys: TurnKeyInput,
+  isExpanded: boolean
+): Set<string> {
+  const aliases = normalizeTurnKeys(turnKeys)
+  if (aliases.length === 0) return new Set(expanded)
+
+  const next = new Set(expanded)
+  for (const alias of aliases) {
+    if (isExpanded) {
+      next.add(alias)
+    } else {
+      next.delete(alias)
+    }
+  }
+  return next
+}
+
 /**
  * Read the full expansion map from localStorage.
  * Returns empty object on parse failure.
@@ -122,20 +164,19 @@ export function useTurnCardExpansion(sessionId: string | undefined) {
   }, [sessionId, expandedTurns, expandedActivityGroups])
 
   // Toggle a single turn's expansion state
-  const toggleTurn = useCallback((turnId: string, expanded: boolean) => {
+  const isTurnExpanded = useCallback((turnKeys: TurnKeyInput) => {
+    return hasExpandedTurnKey(expandedTurns, turnKeys)
+  }, [expandedTurns])
+
+  const toggleTurn = useCallback((turnKeys: TurnKeyInput, expanded: boolean) => {
     setExpandedTurns(prev => {
-      const next = new Set(prev)
-      if (expanded) {
-        next.add(turnId)
-      } else {
-        next.delete(turnId)
-      }
-      return next
+      return applyExpandedTurnKeys(prev, turnKeys, expanded)
     })
   }, [])
 
   return {
     expandedTurns,
+    isTurnExpanded,
     toggleTurn,
     expandedActivityGroups,
     setExpandedActivityGroups,

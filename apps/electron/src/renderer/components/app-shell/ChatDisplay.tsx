@@ -66,13 +66,21 @@ import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
 import { ChatInputZone, type StructuredInputState, type StructuredResponse, type PermissionResponse, type AdminApprovalResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
-import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
+import {
+  hasExpandedTurnKey,
+  normalizeTurnKeys,
+  useTurnCardExpansion,
+} from "@/hooks/useTurnCardExpansion"
 import { useNavigation } from "@/contexts/NavigationContext"
 import { useAppShellContext } from "@/context/AppShellContext"
 import { navigate, routes } from "@/lib/navigate"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { collectFileChangesFromActivities, getFirstFileChangeIdForActivity } from "@/lib/file-changes"
 import { resolveBranchNewPanelOption } from "./branching"
+import {
+  resolveTurnExpandedState,
+  shouldAutoExpandAssistantTurn,
+} from "./turn-card-expansion-strategy"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -125,6 +133,10 @@ function getTurnKey(turn: Turn): string {
   if (turn.type === 'system') return `system-${turn.message.id}`
   if (turn.type === 'auth-request') return `auth-${turn.message.id}`
   return `turn-${turn.turnId}-${turn.timestamp}`
+}
+
+function getAssistantFallbackUiKey(turn: AssistantTurn, index: number): string {
+  return `assistant:turn:${turn.turnId}:${turn.timestamp}:${index}`
 }
 
 interface ChatDisplayProps {
@@ -609,11 +621,14 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // TurnCard expansion state — persisted to localStorage across session switches
   const {
-    expandedTurns,
+    isTurnExpanded,
     toggleTurn,
     expandedActivityGroups,
     setExpandedActivityGroups,
   } = useTurnCardExpansion(session?.id)
+  // In-memory runtime strategy markers (never persisted)
+  const [autoManagedTurnKeys, setAutoManagedTurnKeys] = React.useState<Set<string>>(new Set())
+  const [manualOverrideTurnKeys, setManualOverrideTurnKeys] = React.useState<Set<string>>(new Set())
 
 
   // ============================================================================
@@ -1423,6 +1438,63 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     return groupMessagesByTurn(session.messages)
   }, [session?.messages])
 
+  // Reset runtime-only strategy markers when switching sessions.
+  useEffect(() => {
+    setAutoManagedTurnKeys(new Set())
+    setManualOverrideTurnKeys(new Set())
+  }, [session?.id])
+
+  const assistantTurnExpansionEntries = useMemo(() => {
+    return allTurns
+      .map((turn, index) => {
+        if (turn.type !== 'assistant') return null
+
+        const assistantUiKey = getAssistantTurnUiKey(turn, index)
+        const fallbackUiKey = getAssistantFallbackUiKey(turn, index)
+        return {
+          turnKeys: normalizeTurnKeys([assistantUiKey, fallbackUiKey]),
+          shouldAutoExpand: shouldAutoExpandAssistantTurn(turn),
+        }
+      })
+      .filter((entry): entry is { turnKeys: string[]; shouldAutoExpand: boolean } => entry !== null)
+  }, [allTurns])
+
+  useEffect(() => {
+    if (assistantTurnExpansionEntries.length === 0) return
+
+    setAutoManagedTurnKeys((prev) => {
+      let changed = false
+      const next = new Set(prev)
+
+      for (const entry of assistantTurnExpansionEntries) {
+        if (!entry.shouldAutoExpand) continue
+        if (hasExpandedTurnKey(manualOverrideTurnKeys, entry.turnKeys)) continue
+        if (hasExpandedTurnKey(next, entry.turnKeys)) continue
+
+        for (const turnKey of entry.turnKeys) {
+          if (next.has(turnKey)) continue
+          next.add(turnKey)
+          changed = true
+        }
+      }
+
+      return changed ? next : prev
+    })
+  }, [assistantTurnExpansionEntries, manualOverrideTurnKeys])
+
+  const markManualTurnOverride = useCallback((turnKeys: readonly string[]) => {
+    setManualOverrideTurnKeys((prev) => {
+      let changed = false
+      const next = new Set(prev)
+      for (const turnKey of normalizeTurnKeys(turnKeys)) {
+        if (next.has(turnKey)) continue
+        next.add(turnKey)
+        changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [])
+
   // Keep ref in sync for scroll handler
   totalTurnCountRef.current = allTurns.length
 
@@ -1598,6 +1670,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                   {turns.map((turn, index) => {
                     // Compute turn key and check if it's a search match
                     const turnKey = getTurnKey(turn)
+                    const absoluteTurnIndex = startIndex + index
                     const isCurrentMatch = isSearchActive && matchingTurnIds[currentMatchIndex] === turnKey
                     const isAnyMatch = isSearchActive && matchingTurnIds.includes(turnKey)
 
@@ -1675,7 +1748,19 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     const isLastResponse = index === turns.length - 1 || !turns.slice(index + 1).some(t => t.type === 'user')
 
                     // Assistant turns - render with TurnCard (buffered streaming)
-                    const assistantUiKey = getAssistantTurnUiKey(turn, index)
+                    const assistantUiKey = getAssistantTurnUiKey(turn, absoluteTurnIndex)
+                    const assistantFallbackUiKey = getAssistantFallbackUiKey(turn, absoluteTurnIndex)
+                    const assistantTurnKeys = normalizeTurnKeys([assistantUiKey, assistantFallbackUiKey])
+                    const storedExpanded = isTurnExpanded(assistantTurnKeys)
+                    const hasManualOverride = hasExpandedTurnKey(manualOverrideTurnKeys, assistantTurnKeys)
+                    const hasAutoManaged = hasExpandedTurnKey(autoManagedTurnKeys, assistantTurnKeys)
+                    const shouldAutoExpand = shouldAutoExpandAssistantTurn(turn)
+                    const resolvedExpanded = resolveTurnExpandedState({
+                      storedExpanded,
+                      hasManualOverride,
+                      hasAutoManaged,
+                      shouldAutoExpand,
+                    })
                     return (
                       <div
                         key={turnKey}
@@ -1697,8 +1782,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         intent={turn.intent}
                         isStreaming={turn.isStreaming}
                         isComplete={turn.isComplete}
-                        isExpanded={expandedTurns.has(assistantUiKey)}
-                        onExpandedChange={(expanded) => toggleTurn(assistantUiKey, expanded)}
+                        isExpanded={resolvedExpanded}
+                        onExpandedChange={(expanded) => {
+                          markManualTurnOverride(assistantTurnKeys)
+                          toggleTurn(assistantTurnKeys, expanded)
+                        }}
                         expandedActivityGroups={expandedActivityGroups}
                         onExpandedActivityGroupsChange={setExpandedActivityGroups}
                         todos={turn.todos}
