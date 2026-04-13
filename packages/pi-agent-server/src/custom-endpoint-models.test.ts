@@ -22,4 +22,20 @@ describe('buildCustomEndpointModelDef', () => {
     expect(model.input).toEqual(['text', 'image'])
     expect(model.contextWindow).toBe(262_144)
   })
+
+  it('disables usage-in-streaming for openai-compatible custom endpoints', () => {
+    const model = buildCustomEndpointModelDef('my-model', undefined, undefined, 'openai-completions')
+    expect(model.compat).toEqual({
+      supportsUsageInStreaming: false,
+      supportsStore: false,
+      supportsStrictMode: false,
+      requiresAssistantAfterToolResult: true,
+      requiresToolResultName: true,
+    })
+  })
+
+  it('does not set compat overrides for anthropic-compatible custom endpoints', () => {
+    const model = buildCustomEndpointModelDef('my-model', undefined, undefined, 'anthropic-messages')
+    expect(model.compat).toBeUndefined()
+  })
 })

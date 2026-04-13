@@ -189,10 +189,12 @@ async function testAnthropicCompatible(
   baseUrl: string,
   model: string,
   timeoutMs: number,
+  userAgent?: string,
 ): Promise<{ success: boolean; error?: string }> {
   const url = `${baseUrl.replace(/\/$/, '')}/v1/messages`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const trimmedUserAgent = userAgent?.trim();
 
   try {
     const res = await fetch(url, {
@@ -202,6 +204,7 @@ async function testAnthropicCompatible(
         'content-type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
+        ...(trimmedUserAgent ? { 'User-Agent': trimmedUserAgent } : {}),
       },
       body: JSON.stringify({
         model,
@@ -311,7 +314,13 @@ export const piDriver: ProviderDriver = {
     if (piAuthProvider === 'minimax-cn' && bareModel.startsWith('MiniMax-')) {
       bareModel = bareModel.slice('MiniMax-'.length);
     }
-    return testAnthropicCompatible(args.apiKey, baseUrl, bareModel, args.timeoutMs);
+    return testAnthropicCompatible(
+      args.apiKey,
+      baseUrl,
+      bareModel,
+      args.timeoutMs,
+      args.connection?.customEndpoint?.userAgent,
+    );
   },
   validateStoredConnection: async () => ({ success: true }),
 };

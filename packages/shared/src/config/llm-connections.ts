@@ -109,6 +109,8 @@ export interface CustomEndpointConfig {
   api: CustomEndpointApi;
   /** Explicit capability hint for arbitrary endpoints — never guessed automatically. */
   supportsImages?: boolean;
+  /** Optional request User-Agent override for custom endpoints. */
+  userAgent?: string;
 }
 
 /**

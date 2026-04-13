@@ -74,6 +74,7 @@ interface OnboardingWizardProps {
     activePreset?: string
     models?: string[]
     customApi?: CustomEndpointApi
+    customUserAgent?: string
   }
 
   className?: string

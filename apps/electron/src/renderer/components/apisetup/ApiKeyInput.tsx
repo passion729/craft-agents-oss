@@ -79,6 +79,8 @@ export interface ApiKeyInputProps {
     models?: string[]
     /** Pre-fill the protocol toggle for custom endpoints */
     customApi?: CustomEndpointApi
+    /** Pre-fill User-Agent override for custom endpoints */
+    customUserAgent?: string
   }
 }
 
@@ -192,6 +194,7 @@ export function ApiKeyInput({
   )
   const [connectionDefaultModel, setConnectionDefaultModel] = useState(initialValues?.connectionDefaultModel ?? '')
   const [customApi, setCustomApi] = useState<CustomEndpointApi>(initialValues?.customApi ?? 'openai-completions')
+  const [customUserAgent, setCustomUserAgent] = useState(initialValues?.customUserAgent ?? '')
   const [modelError, setModelError] = useState<string | null>(null)
 
   // Bedrock auth state
@@ -385,7 +388,12 @@ export function ApiKeyInput({
 
     // Include custom endpoint protocol when user configured a custom base URL
     const isCustomEndpoint = activePreset === 'custom' && !!effectiveBaseUrl
-    const customEndpoint = isCustomEndpoint ? { api: customApi } : undefined
+    const customEndpoint = isCustomEndpoint
+      ? {
+        api: customApi,
+        ...(customUserAgent.trim() ? { userAgent: customUserAgent.trim() } : {}),
+      }
+      : undefined
     const resolvedPiAuthProvider = isCustomEndpoint
       ? (customApi === 'anthropic-messages' ? 'anthropic' : 'openai')
       : effectivePiAuthProvider
@@ -526,6 +534,25 @@ export function ApiKeyInput({
           <p className="text-xs text-foreground/30">
             Most third-party APIs (Ollama, vLLM, DashScope) use OpenAI Compatible.
           </p>
+          <div className="space-y-1.5 pt-1.5">
+            <Label htmlFor="custom-user-agent" className="text-muted-foreground font-normal text-xs">
+              User-Agent <span className="text-foreground/30">· optional</span>
+            </Label>
+            <div className={cn(
+              "rounded-md shadow-minimal transition-colors",
+              "bg-foreground-2 focus-within:bg-background"
+            )}>
+              <Input
+                id="custom-user-agent"
+                type="text"
+                value={customUserAgent}
+                onChange={(e) => setCustomUserAgent(e.target.value)}
+                placeholder="e.g. MyApp/1.0"
+                className="border-0 bg-transparent shadow-none"
+                disabled={isDisabled}
+              />
+            </div>
+          </div>
         </div>
       )}
 

@@ -101,6 +101,27 @@ describe('apiSetupMethodToConnectionSetup', () => {
     expect(setup.modelSelectionMode).toBe('userDefined3Tier')
   })
 
+  it('preserves custom endpoint userAgent in setup payload', () => {
+    const setup = apiSetupMethodToConnectionSetup(
+      'pi_api_key',
+      {
+        credential: 'sk-pi',
+        baseUrl: 'https://proxy.example.com/v1',
+        customEndpoint: {
+          api: 'anthropic-messages',
+          userAgent: 'MyAgent/1.0',
+        },
+      },
+      null,
+      new Set(),
+    )
+
+    expect(setup.customEndpoint).toEqual({
+      api: 'anthropic-messages',
+      userAgent: 'MyAgent/1.0',
+    })
+  })
+
   it('uses editingSlug when editing', () => {
     const setup = apiSetupMethodToConnectionSetup(
       'anthropic_api_key',

@@ -102,7 +102,7 @@ interface InitMessage {
   branchFromSdkSessionId?: string;
   branchFromSessionPath?: string;
   branchFromSdkTurnId?: string;
-  customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
+  customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean; userAgent?: string };
   customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
   webSearchProvider?: 'api-native' | 'duckduckgo' | 'bing.com' | 'baidu.com';
   piAuth?: { provider: string; credential: PiCredential };
@@ -414,15 +414,18 @@ function registerCustomEndpointModels(
     }
   }
   const allIds = [...customEndpointModelIds];
+  const userAgent = initConfig?.customEndpoint?.userAgent?.trim();
   registry.registerProvider('custom-endpoint', {
     baseUrl,
     apiKey: resolveCustomEndpointApiKey(),
     api,
     authHeader: true,
+    ...(userAgent ? { headers: { 'User-Agent': userAgent } } : {}),
     models: allIds.map(id => buildCustomEndpointModelDef(
       id,
       { supportsImages: initConfig?.customEndpoint?.supportsImages === true },
       customModelOverrides.get(id),
+      api,
     )),
   });
   debugLog(`Registered custom endpoint: ${baseUrl} with ${allIds.length} model(s) [${allIds.join(', ')}], api: ${api}`);
