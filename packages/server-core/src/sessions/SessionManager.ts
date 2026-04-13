@@ -88,6 +88,7 @@ import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import type { WebSearchProviderPreference } from '@craft-agent/shared/search/provider'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId } from '@craft-agent/shared/labels'
@@ -2834,6 +2835,10 @@ export class SessionManager implements ISessionManager {
           apiServers,
           enabledSlugs,
         },
+        },
+        providerOptions: {
+          piAuthProvider: backendContext.connection?.piAuthProvider,
+          webSearchProvider: workspaceConfig?.defaults?.webSearchProvider,
         },
       }) as AgentInstance
 
@@ -5951,6 +5956,17 @@ export class SessionManager implements ISessionManager {
     }
   }
 
+  setSessionWebSearchProvider(sessionId: string, provider: WebSearchProviderPreference): void {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return
+
+    if (managed.agent) {
+      managed.agent.setWebSearchProvider?.(provider)
+    }
+
+    sessionLog.info(`Session ${sessionId}: web search provider set to ${provider}`)
+  }
+
   /**
    * Generate an AI title for a session from the user's first message.
    * Uses the agent's generateTitle() method which handles provider-specific SDK calls.
@@ -6850,7 +6866,10 @@ export class SessionManager implements ISessionManager {
         envOverrides,
         isHeadless: true,
       },
-      providerOptions: { piAuthProvider: backendContext.connection?.piAuthProvider },
+      providerOptions: {
+        piAuthProvider: backendContext.connection?.piAuthProvider,
+        webSearchProvider: wsConfig?.defaults?.webSearchProvider,
+      },
     })
 
     try {

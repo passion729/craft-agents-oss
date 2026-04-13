@@ -33,6 +33,7 @@ import type { ModelProvider } from '../../config/models.ts';
 import type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
 export type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
 import type { AutomationSystem } from '../../automations/index.ts';
+import type { WebSearchProviderPreference } from '../../search/provider.ts';
 
 /**
  * Provider identifier for AI backends.
@@ -429,6 +430,9 @@ export interface AgentBackend {
 
   /** Set thinking level */
   setThinkingLevel(level: ThinkingLevel): void;
+
+  /** Set preferred web search provider for web_search tool routing */
+  setWebSearchProvider?(provider: WebSearchProviderPreference): void;
 
   // ============================================================
   // Permission Mode

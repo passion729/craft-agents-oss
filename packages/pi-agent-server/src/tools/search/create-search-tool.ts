@@ -11,7 +11,10 @@ import type { WebSearchProvider, WebSearchResult } from './types.ts';
 import { DDGSearchProvider } from './providers/ddg.ts';
 
 const schema = Type.Object({
-  query: Type.String({ description: 'The search query' }),
+  query: Type.Optional(Type.String({ description: 'The search query' })),
+  q: Type.Optional(Type.String({ description: 'Alias for query' })),
+  searchQuery: Type.Optional(Type.String({ description: 'Alias for query' })),
+  keyword: Type.Optional(Type.String({ description: 'Alias for query' })),
   count: Type.Optional(
     Type.Number({
       description: 'Max results (1-10, default 5)',
@@ -53,6 +56,21 @@ function formatErrorSnippet(message: string, max = 180): string {
   return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
 }
 
+function resolveQuery(params: {
+  query?: unknown;
+  q?: unknown;
+  searchQuery?: unknown;
+  keyword?: unknown;
+}): string | null {
+  const candidates = [params.query, params.q, params.searchQuery, params.keyword];
+  for (const value of candidates) {
+    if (typeof value !== 'string') continue;
+    const normalized = value.trim();
+    if (normalized.length > 0) return normalized;
+  }
+  return null;
+}
+
 export function createSearchTool(
   provider: WebSearchProvider,
   fallbackProvider: WebSearchProvider = new DDGSearchProvider(),
@@ -63,10 +81,22 @@ export function createSearchTool(
     description:
       'Search the web for current information. Returns titles, URLs, and snippets. Use for current information, documentation lookups, or fact-checking.',
     promptSnippet:
-      'Use web_search for up-to-date information, documentation lookups, or fact-checking. Returns titles, URLs, and snippets. Accepts a query string and optional count (1-10).',
+      'Use web_search for up-to-date information, documentation lookups, or fact-checking. Returns titles, URLs, and snippets. Pass a non-empty query (field: query) and optional count (1-10).',
     parameters: schema,
     async execute(toolCallId, params) {
-      const { query } = params;
+      const query = resolveQuery(params);
+      if (!query) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'web_search requires a non-empty `query` argument. Example: {"query":"latest bun release notes","count":5}',
+            },
+          ],
+          details: { isError: true },
+        };
+      }
+
       const count = Math.max(1, Math.min(10, params.count ?? 5));
 
       try {

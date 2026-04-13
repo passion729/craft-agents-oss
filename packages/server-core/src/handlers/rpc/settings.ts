@@ -8,6 +8,7 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 import { isValidWorkingDirectory } from '../../utils/path-validation'
+import { isWebSearchProviderPreference } from '@craft-agent/shared/search/provider'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.SETTINGS_GET,
@@ -107,6 +108,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       permissionMode: config?.defaults?.permissionMode,
       cyclablePermissionModes: config?.defaults?.cyclablePermissionModes,
       thinkingLevel: normalizeThinkingLevel(config?.defaults?.thinkingLevel),
+      webSearchProvider: config?.defaults?.webSearchProvider,
       workingDirectory: config?.defaults?.workingDirectory,
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
       defaultLlmConnection: config?.defaults?.defaultLlmConnection,
@@ -122,7 +124,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       : value
 
     // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection']
+    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'webSearchProvider', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection']
     if (!validKeys.includes(key)) {
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
@@ -139,6 +141,12 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       const validation = isValidWorkingDirectory(String(normalizedValue))
       if (!validation.valid) {
         throw new Error(validation.reason!)
+      }
+    }
+
+    if (key === 'webSearchProvider' && normalizedValue !== undefined && normalizedValue !== null) {
+      if (!isWebSearchProviderPreference(normalizedValue)) {
+        throw new Error('Invalid webSearchProvider. Valid values: api-native, duckduckgo, bing.com, baidu.com')
       }
     }
 

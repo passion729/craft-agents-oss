@@ -99,4 +99,36 @@ describe('createSearchTool', () => {
     expect((result.content[0] as any).text).toContain('Search failed');
     expect((result.content[0] as any).text).toContain('ddg boom');
   });
+
+  it('accepts alias field q when query is missing', async () => {
+    let capturedQuery = '';
+    const provider: WebSearchProvider = {
+      name: 'MockProvider',
+      async search(query) {
+        capturedQuery = query;
+        return [{ title: 'Alias hit', url: 'https://example.com', description: 'ok' }];
+      },
+    };
+
+    const tool = createSearchTool(provider);
+    const result = await tool.execute('tool-5', { q: 'craft agents' } as any);
+
+    expect(capturedQuery).toBe('craft agents');
+    expect(result.details?.isError).toBeUndefined();
+  });
+
+  it('returns a recoverable tool error when query is missing', async () => {
+    const provider: WebSearchProvider = {
+      name: 'MockProvider',
+      async search() {
+        return [];
+      },
+    };
+
+    const tool = createSearchTool(provider);
+    const result = await tool.execute('tool-6', {} as any);
+
+    expect(result.details?.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain('requires a non-empty `query`');
+  });
 });

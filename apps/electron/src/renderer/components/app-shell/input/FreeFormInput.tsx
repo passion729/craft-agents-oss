@@ -11,6 +11,7 @@ import {
   DatabaseZap,
   ChevronDown,
   AlertCircle,
+  Globe,
   X,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder, Spinner } from '@craft-agent/ui'
@@ -67,6 +68,7 @@ import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelNameKey } from '@craft-agent/shared/agent/thinking-levels'
+import type { WebSearchProviderPreference } from '@craft-agent/shared/search/provider'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { ToolbarStatusSlot } from './ToolbarStatusSlot'
@@ -104,6 +106,17 @@ function formatFollowUpChipText(text: string, fallback: string, maxLength = 50):
   return normalized.length > maxLength
     ? `${normalized.slice(0, maxLength - 1).trimEnd()}…`
     : normalized
+}
+
+const WEB_SEARCH_PROVIDER_OPTIONS: Array<{ value: WebSearchProviderPreference; label: string }> = [
+  { value: 'api-native', label: 'API Native' },
+  { value: 'duckduckgo', label: 'DuckDuckGo' },
+  { value: 'bing.com', label: 'Bing' },
+  { value: 'baidu.com', label: 'Baidu' },
+]
+
+function getWebSearchProviderLabel(provider: WebSearchProviderPreference): string {
+  return WEB_SEARCH_PROVIDER_OPTIONS.find((option) => option.value === provider)?.label ?? 'API Native'
 }
 
 
@@ -505,6 +518,8 @@ export function FreeFormInput({
   const [isDraggingOver, setIsDraggingOver] = React.useState(false)
   const [loadingCount, setLoadingCount] = React.useState(0)
   const [sourceDropdownOpen, setSourceDropdownOpen] = React.useState(false)
+  const [webSearchDropdownOpen, setWebSearchDropdownOpen] = React.useState(false)
+  const [webSearchProvider, setWebSearchProvider] = React.useState<WebSearchProviderPreference>('api-native')
   const [isFocused, setIsFocused] = React.useState(false)
   const [inputMaxHeight, setInputMaxHeight] = React.useState(540)
   const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false)
@@ -533,6 +548,68 @@ export function FreeFormInput({
     }
     loadInputSettings()
   }, [])
+
+  React.useEffect(() => {
+    let cancelled = false
+
+    const loadWebSearchProvider = async () => {
+      if (!workspaceId || !window.electronAPI) {
+        setWebSearchProvider('api-native')
+        return
+      }
+
+      try {
+        const settings = await window.electronAPI.getWorkspaceSettings(workspaceId)
+        const provider = settings?.webSearchProvider ?? 'api-native'
+        if (cancelled) return
+
+        setWebSearchProvider(provider)
+
+        // Keep running session in sync with persisted workspace default.
+        if (sessionId) {
+          await window.electronAPI.sessionCommand(sessionId, {
+            type: 'setWebSearchProvider',
+            provider,
+          })
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[FreeFormInput] Failed to load web search provider:', error)
+        }
+      }
+    }
+
+    loadWebSearchProvider()
+    return () => {
+      cancelled = true
+    }
+  }, [workspaceId, sessionId])
+
+  const handleWebSearchProviderChange = React.useCallback(async (provider: WebSearchProviderPreference) => {
+    const previousProvider = webSearchProvider
+    setWebSearchProvider(provider)
+
+    if (!window.electronAPI) {
+      return
+    }
+
+    try {
+      if (workspaceId) {
+        await window.electronAPI.updateWorkspaceSetting(workspaceId, 'webSearchProvider', provider)
+      }
+
+      if (sessionId) {
+        await window.electronAPI.sessionCommand(sessionId, {
+          type: 'setWebSearchProvider',
+          provider,
+        })
+      }
+    } catch (error) {
+      setWebSearchProvider(previousProvider)
+      console.error('[FreeFormInput] Failed to update web search provider:', error)
+      toast.error('Failed to update web search provider')
+    }
+  }, [sessionId, webSearchProvider, workspaceId])
 
   // Double-Esc interrupt: show warning overlay on first Esc, interrupt on second
   const { showEscapeOverlay } = useEscapeInterrupt()
@@ -1459,6 +1536,45 @@ export function FreeFormInput({
     return () => window.clearTimeout(timer)
   }, [followUpLayoutKey])
 
+  const webSearchProviderLabel = getWebSearchProviderLabel(webSearchProvider)
+
+  const renderWebSearchProviderBadge = (isExpanded: boolean) => (
+    <DropdownMenu open={webSearchDropdownOpen} onOpenChange={setWebSearchDropdownOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <FreeFormInputContextBadge
+              icon={<Globe className="h-4 w-4" />}
+              label={webSearchProviderLabel}
+              isExpanded={isExpanded}
+              hasSelection={webSearchProvider !== 'api-native'}
+              showChevron={isExpanded}
+              isOpen={webSearchDropdownOpen}
+              disabled={disabled}
+            />
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          Web search provider
+        </TooltipContent>
+      </Tooltip>
+      <StyledDropdownMenuContent side="top" align="start" sideOffset={8} className="min-w-[220px]">
+        {WEB_SEARCH_PROVIDER_OPTIONS.map((option) => (
+          <StyledDropdownMenuItem
+            key={option.value}
+            onSelect={() => {
+              void handleWebSearchProviderChange(option.value)
+            }}
+            className="flex items-center justify-between rounded-lg px-2 py-2"
+          >
+            <span>{option.label}</span>
+            {webSearchProvider === option.value && <Check className="h-4 w-4 text-foreground" />}
+          </StyledDropdownMenuItem>
+        ))}
+      </StyledDropdownMenuContent>
+    </DropdownMenu>
+  )
+
   const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0
 
   return (
@@ -1702,6 +1818,7 @@ export function FreeFormInput({
             tooltip="Attach files"
             disabled={disabled}
           />
+          {renderWebSearchProviderBadge(false)}
           {onSourcesChange && (
             <div className="relative shrink min-w-0">
               <FreeFormInputContextBadge
@@ -1805,6 +1922,7 @@ export function FreeFormInput({
             tooltip={t("chat.attachFilesTooltip")}
             disabled={disabled}
           />
+          {renderWebSearchProviderBadge(isEmptySession)}
 
           {/* 2. Source Selector Badge - only show if onSourcesChange is provided */}
           {onSourcesChange && (

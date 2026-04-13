@@ -27,6 +27,7 @@ import { buildCallLlmRequest, type LLMQueryRequest, type LLMQueryResult } from '
 import { getLlmConnections, getDefaultLlmConnection } from '../config/storage.ts';
 import { loadAllSources } from '../sources/storage.ts';
 import type { ApiServerConfig } from '../mcp/mcp-pool.ts';
+import type { WebSearchProviderPreference } from '../search/provider.ts';
 
 import type {
   AgentBackend,
@@ -441,6 +442,10 @@ export abstract class BaseAgent implements AgentBackend {
   setThinkingLevel(level: ThinkingLevel): void {
     this._thinkingLevel = level;
     this.debug(`Thinking level set to: ${level}`);
+  }
+
+  setWebSearchProvider(_provider: WebSearchProviderPreference): void {
+    // Default no-op. Pi backend overrides this to forward runtime updates.
   }
 
   // ============================================================

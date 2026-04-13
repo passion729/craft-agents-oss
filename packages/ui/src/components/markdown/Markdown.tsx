@@ -184,7 +184,7 @@ function createComponents(
         <a
           href={href}
           onClick={handleClick}
-          className="text-accent hover:underline cursor-pointer"
+          className="text-accent hover:underline cursor-pointer break-words [overflow-wrap:anywhere]"
         >
           {children}
         </a>

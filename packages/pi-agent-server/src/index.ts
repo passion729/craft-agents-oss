@@ -104,6 +104,7 @@ interface InitMessage {
   branchFromSdkTurnId?: string;
   customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
   customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
+  webSearchProvider?: 'api-native' | 'duckduckgo' | 'bing.com' | 'baidu.com';
   piAuth?: { provider: string; credential: PiCredential };
 }
 
@@ -119,6 +120,7 @@ type InboundMessage =
   | { type: 'ensure_session_ready'; id: string }
   | { type: 'set_model'; model: string }
   | { type: 'set_thinking_level'; level: string }
+  | { type: 'set_web_search_provider'; provider: 'api-native' | 'duckduckgo' | 'bing.com' | 'baidu.com' }
   | { type: 'compact'; id: string; customInstructions?: string }
   | { type: 'set_auto_compaction'; id: string; enabled: boolean }
   | { type: 'steer'; message: string }
@@ -494,10 +496,22 @@ async function ensureSession(): Promise<AgentSession> {
   // are used without recreating the session.
   const searchProvider = {
     get name() {
-      return resolveSearchProvider(initConfig?.piAuth).name;
+      return resolveSearchProvider({
+        piAuth: initConfig?.piAuth,
+        baseUrl: initConfig?.baseUrl,
+        model: initConfig?.model,
+        webSearchProvider: initConfig?.webSearchProvider,
+        customEndpoint: initConfig?.customEndpoint,
+      }).name;
     },
     async search(query: string, count: number) {
-      return resolveSearchProvider(initConfig?.piAuth).search(query, count);
+      return resolveSearchProvider({
+        piAuth: initConfig?.piAuth,
+        baseUrl: initConfig?.baseUrl,
+        model: initConfig?.model,
+        webSearchProvider: initConfig?.webSearchProvider,
+        customEndpoint: initConfig?.customEndpoint,
+      }).search(query, count);
     },
   };
   const searchTool = createSearchTool(searchProvider);
@@ -1483,6 +1497,12 @@ async function handleSetThinkingLevel(msg: Extract<InboundMessage, { type: 'set_
   }
 }
 
+function handleSetWebSearchProvider(msg: Extract<InboundMessage, { type: 'set_web_search_provider' }>): void {
+  if (!initConfig) return;
+  initConfig.webSearchProvider = msg.provider;
+  debugLog(`[set_web_search_provider] Web search provider changed to: ${msg.provider}`);
+}
+
 function handleShutdown(): void {
   debugLog('Shutdown requested');
 
@@ -1559,6 +1579,10 @@ async function processMessage(msg: InboundMessage): Promise<void> {
 
     case 'set_thinking_level':
       await handleSetThinkingLevel(msg);
+      break;
+
+    case 'set_web_search_provider':
+      handleSetWebSearchProvider(msg);
       break;
 
     case 'compact':

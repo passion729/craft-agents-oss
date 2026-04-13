@@ -11,6 +11,7 @@ import type { StoredAttachment, AnnotationV1 } from '@craft-agent/core/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/mode-types'
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import type { AuthResult } from '@craft-agent/shared/agent'
+import type { WebSearchProviderPreference } from '@craft-agent/shared/search/provider'
 import type {
   Session,
   SessionStatus,
@@ -68,6 +69,7 @@ export interface ISessionManager {
 
   setSessionPermissionMode(sessionId: string, mode: PermissionMode): void
   setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void
+  setSessionWebSearchProvider(sessionId: string, provider: WebSearchProviderPreference): void
   updateWorkingDirectory(sessionId: string, path: string): void
   setSessionSources(sessionId: string, sourceSlugs: string[]): Promise<void>
   setSessionLabels(sessionId: string, labels: string[]): void

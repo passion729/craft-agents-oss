@@ -10,6 +10,7 @@ import type { LlmConnection } from '../../../config/storage.ts';
 import type { ModelFetchResult } from '../../../config/model-fetcher.ts';
 import type { CredentialManager } from '../../../credentials/manager.ts';
 import type { ResolvedBackendRuntimePaths } from './runtime-resolver.ts';
+import type { WebSearchProviderPreference } from '../../../search/provider.ts';
 
 export interface BackendRuntimePaths {
   copilotCli?: string;
@@ -29,6 +30,8 @@ export interface BackendRuntimePayload extends Record<string, unknown> {
   customEndpoint?: { api: string; supportsImages?: boolean };
   /** Models registered for a custom endpoint. Strings default to 128K context; objects allow overrides. */
   customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
+  /** Preferred web search provider override for the web_search tool. */
+  webSearchProvider?: WebSearchProviderPreference;
 }
 
 export interface BackendResolutionContext {
@@ -43,6 +46,7 @@ export interface BackendResolutionContext {
 
 export interface BackendProviderOptions {
   piAuthProvider?: string;
+  webSearchProvider?: WebSearchProviderPreference;
 }
 
 export interface BackendModelFetchCredentials {

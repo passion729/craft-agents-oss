@@ -2,8 +2,9 @@
  * Resolves the best web search provider based on the user's LLM connection.
  *
  * Priority:
- *   1. Provider-native search (OpenAI, ChatGPT, OpenRouter, Google) — best quality
- *   2. DuckDuckGo — universal fallback, no API key required
+ *   1. Custom endpoint native search (OpenAI-compatible responses endpoint)
+ *   2. Provider-native search (OpenAI, ChatGPT, OpenRouter, Google) — best quality
+ *   3. DuckDuckGo — universal fallback, no API key required
  *
  * To add a new Responses API-compatible provider:
  *   1. Add a case here with the provider name and apiBase URL
@@ -15,6 +16,8 @@ import { ResponsesApiSearchProvider } from './providers/openai.ts';
 import { ChatGPTBackendSearchProvider, extractChatGptAccountId } from './providers/chatgpt.ts';
 import { GoogleSearchProvider } from './providers/google.ts';
 import { DDGSearchProvider } from './providers/ddg.ts';
+import { BingSearchProvider } from './providers/bing.ts';
+import { BaiduSearchProvider } from './providers/baidu.ts';
 
 export type SearchProviderCredential =
   | { type: 'api_key'; key: string }
@@ -24,6 +27,17 @@ export type SearchProviderCredential =
 export interface SearchProviderAuthConfig {
   provider?: string;
   credential?: SearchProviderCredential;
+}
+
+export interface SearchProviderRuntimeContext {
+  piAuth?: SearchProviderAuthConfig;
+  baseUrl?: string;
+  model?: string;
+  webSearchProvider?: 'api-native' | 'duckduckgo' | 'bing.com' | 'baidu.com';
+  customEndpoint?: {
+    api?: string;
+    supportsImages?: boolean;
+  };
 }
 
 function getApiKey(piAuth?: SearchProviderAuthConfig): string | undefined {
@@ -49,16 +63,73 @@ function getOpenAiCodexAccessToken(piAuth?: SearchProviderAuthConfig): string | 
   return getOAuthAccess(piAuth) ?? getApiKey(piAuth);
 }
 
-export function resolveSearchProvider(piAuth?: SearchProviderAuthConfig): WebSearchProvider {
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '');
+}
+
+function normalizeModelId(model?: string): string | undefined {
+  const trimmed = model?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.startsWith('pi/') ? trimmed.slice(3) : trimmed;
+}
+
+export function resolveSearchProvider(context?: SearchProviderRuntimeContext): WebSearchProvider {
+  const providerPreference = context?.webSearchProvider;
+  if (providerPreference === 'duckduckgo') {
+    return new DDGSearchProvider();
+  }
+  if (providerPreference === 'bing.com') {
+    return new BingSearchProvider();
+  }
+  if (providerPreference === 'baidu.com') {
+    return new BaiduSearchProvider();
+  }
+
+  const piAuth = context?.piAuth;
   const provider = piAuth?.provider;
   const apiKey = getApiKey(piAuth);
   const openAiCodexAccess = getOpenAiCodexAccessToken(piAuth);
+  const customEndpointApi = context?.customEndpoint?.api;
+  const customBaseUrl = context?.baseUrl?.trim();
+  const preferredModel = normalizeModelId(context?.model);
+
+  // Custom OpenAI-compatible endpoint must use the configured base URL,
+  // never hardcode api.openai.com with a third-party key.
+  if (customEndpointApi === 'openai-completions') {
+    if (customBaseUrl && apiKey) {
+      return new ResponsesApiSearchProvider({
+        apiBase: normalizeBaseUrl(customBaseUrl),
+        apiKey,
+        ...(preferredModel ? { model: preferredModel } : {}),
+      });
+    }
+    return new DDGSearchProvider();
+  }
+
+  // Non-OpenAI custom endpoint protocols are not wired for provider-native search yet.
+  if (customEndpointApi) {
+    return new DDGSearchProvider();
+  }
+
+  // Backward-compatible safeguard:
+  // Any API-key provider with explicit baseUrl should prefer that endpoint when
+  // search protocol is OpenAI-compatible (or protocol metadata is missing).
+  // This prevents third-party OpenAI-compatible keys from being sent to api.openai.com.
+  const isNonResponsesProvider = provider === 'google' || provider === 'openai-codex';
+  if (apiKey && customBaseUrl && !isNonResponsesProvider) {
+    return new ResponsesApiSearchProvider({
+      apiBase: normalizeBaseUrl(customBaseUrl),
+      apiKey,
+      ...(preferredModel ? { model: preferredModel } : {}),
+    });
+  }
 
   // OpenAI with API key → standard Responses API
   if (provider === 'openai' && apiKey) {
     return new ResponsesApiSearchProvider({
       apiBase: 'https://api.openai.com/v1',
       apiKey,
+      ...(preferredModel ? { model: preferredModel } : {}),
     });
   }
 
@@ -77,7 +148,7 @@ export function resolveSearchProvider(piAuth?: SearchProviderAuthConfig): WebSea
     return new ResponsesApiSearchProvider({
       apiBase: 'https://openrouter.ai/api/v1',
       apiKey,
-      model: 'openai/gpt-4o-mini',
+      model: preferredModel || 'openai/gpt-4o-mini',
     });
   }
 

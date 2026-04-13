@@ -177,11 +177,11 @@ async function searchDDGApi(query: string, count: number): Promise<WebSearchResu
 
 async function searchDDGHtml(query: string, count: number): Promise<WebSearchResult[]> {
   const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-  const html = await fetchDuckDuckGoHtml(url, 'DDG HTML');
+  const html = await fetchDuckDuckGoHtml(url, 'DuckDuckGo HTML');
   const results = extractResultsFromDuckDuckGoHtml(html, count);
 
   if (results.length === 0) {
-    throw new Error('No results parsed from DDG HTML');
+    throw new Error('No results parsed from DuckDuckGo HTML');
   }
 
   return results;
@@ -189,11 +189,11 @@ async function searchDDGHtml(query: string, count: number): Promise<WebSearchRes
 
 async function searchDDGLite(query: string, count: number): Promise<WebSearchResult[]> {
   const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
-  const html = await fetchDuckDuckGoHtml(url, 'DDG Lite');
+  const html = await fetchDuckDuckGoHtml(url, 'DuckDuckGo Lite');
   const results = extractResultsFromDuckDuckGoHtml(html, count);
 
   if (results.length === 0) {
-    throw new Error('No results parsed from DDG Lite HTML');
+    throw new Error('No results parsed from DuckDuckGo Lite HTML');
   }
 
   return results;
@@ -208,19 +208,19 @@ export class DDGSearchProvider implements WebSearchProvider {
     try {
       return await searchDDGApi(query, count);
     } catch (err) {
-      failurePath.push(`ddg_primary:${err instanceof Error ? err.message : String(err)}`);
+      failurePath.push(`duckduckgo_primary:${err instanceof Error ? err.message : String(err)}`);
     }
 
     try {
       return await searchDDGHtml(query, count);
     } catch (err) {
-      failurePath.push(`ddg_html:${err instanceof Error ? err.message : String(err)}`);
+      failurePath.push(`duckduckgo_html:${err instanceof Error ? err.message : String(err)}`);
     }
 
     try {
       return await searchDDGLite(query, count);
     } catch (err) {
-      failurePath.push(`ddg_lite:${err instanceof Error ? err.message : String(err)}`);
+      failurePath.push(`duckduckgo_lite:${err instanceof Error ? err.message : String(err)}`);
     }
 
     throw new Error(`All DuckDuckGo endpoints failed: ${failurePath.join('; ')}`);

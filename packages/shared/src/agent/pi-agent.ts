@@ -29,6 +29,7 @@ import { getBackendRuntime } from './backend/internal/driver-types.ts';
 
 import type { PermissionMode } from './mode-manager.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
+import type { WebSearchProviderPreference } from '../search/provider.ts';
 
 // Import models from centralized registry
 import { getModelById } from '../config/models.ts';
@@ -432,6 +433,7 @@ export class PiAgent extends BaseAgent {
       baseUrl: runtime.baseUrl,
       customEndpoint: runtime.customEndpoint,
       customModels: runtime.customModels,
+      webSearchProvider: runtime.webSearchProvider,
       // Branch params for Pi SDK session fork
       branchFromSdkSessionId: this.config.session?.branchFromSdkSessionId,
       branchFromSessionPath: this.config.session?.branchFromSessionPath,
@@ -1906,6 +1908,15 @@ export class PiAgent extends BaseAgent {
       this.send({ type: 'set_thinking_level', level });
     } else {
       this.debug(`Thinking level updated but no subprocess to forward to: ${previousLevel} → ${level}`);
+    }
+  }
+
+  override setWebSearchProvider(provider: WebSearchProviderPreference): void {
+    if (this.subprocess) {
+      this.debug(`Forwarding web search provider change to subprocess: ${provider}`);
+      this.send({ type: 'set_web_search_provider', provider });
+    } else {
+      this.debug(`Web search provider updated but no subprocess to forward to: ${provider}`);
     }
   }
 

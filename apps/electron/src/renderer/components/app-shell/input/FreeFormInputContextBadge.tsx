@@ -4,7 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { FadingText } from '@/components/ui/fading-text'
 import { cn } from '@/lib/utils'
 
-export interface FreeFormInputContextBadgeProps {
+export interface FreeFormInputContextBadgeProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   /** Left area - fully customizable (icon, avatar stack, etc.) */
   icon: React.ReactNode
   /** Label text - shown in expanded state or collapsed with selection */
@@ -15,8 +15,6 @@ export interface FreeFormInputContextBadgeProps {
   hasSelection?: boolean
   /** Show chevron indicator (for dropdowns) - only visible in expanded state */
   showChevron?: boolean
-  /** Click handler */
-  onClick?: () => void
   /** Tooltip content - can be string or ReactNode for rich content */
   tooltip?: React.ReactNode
   /** Whether the badge is currently "open" (e.g., dropdown is shown) */
@@ -55,6 +53,7 @@ export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, Fre
       className,
       buttonRef,
       'data-tutorial': dataTutorial,
+      ...buttonProps
     },
     ref
   ) {
@@ -68,10 +67,11 @@ export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, Fre
       <button
         ref={mergedRef as React.Ref<HTMLButtonElement>}
         type="button"
-        aria-label={label}
+        aria-label={buttonProps['aria-label'] ?? label}
         onClick={onClick}
         disabled={disabled}
         data-tutorial={dataTutorial}
+        {...buttonProps}
         className={cn(
           // Base styles - shrink + min-w-0 allows badge to compress in tight layouts
           "input-toolbar-btn inline-flex items-center gap-1.5 h-7 rounded-[6px] text-[13px] text-foreground transition-colors select-none shrink min-w-0",

@@ -5,6 +5,7 @@ import type { StoredAttachment } from '@craft-agent/core/types'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { perf } from '@craft-agent/shared/utils'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import { isWebSearchProviderPreference } from '@craft-agent/shared/search/provider'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { setTransferableHandler } from './transfer'
@@ -259,6 +260,11 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
           throw new Error(`Invalid thinking level: ${command.level}. Valid values: 'off', 'low', 'medium', 'high', 'max'`)
         }
         return sessionManager.setSessionThinkingLevel(sessionId, command.level)
+      case 'setWebSearchProvider':
+        if (!isWebSearchProviderPreference(command.provider)) {
+          throw new Error(`Invalid web search provider: ${command.provider}`)
+        }
+        return sessionManager.setSessionWebSearchProvider(sessionId, command.provider)
       case 'updateWorkingDirectory':
         return sessionManager.updateWorkingDirectory(sessionId, command.dir)
       case 'setSources':

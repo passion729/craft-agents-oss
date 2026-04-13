@@ -206,4 +206,137 @@ describe('ResponsesApiSearchProvider', () => {
     expect(openrouter.name).toBe('OpenRouter');
     expect(custom.name).toBe('Web Search');
   });
+
+  it('falls back to gpt-4o-mini when preferred model is unsupported', async () => {
+    const calledModels: string[] = [];
+
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const calledBody = init?.body ? JSON.parse(String(init.body)) : null;
+      const model = calledBody?.model;
+      calledModels.push(model);
+
+      if (model === 'gpt-4.1-mini') {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: 'model_not_supported_in_group',
+              message: 'Model gpt-4.1-mini is not supported in this group',
+              type: 'api_error',
+            },
+          }),
+          { status: 503, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          output: [
+            {
+              type: 'message',
+              content: [
+                {
+                  type: 'output_text',
+                  text: 'fallback worked',
+                  annotations: [{ type: 'url_citation', url: 'https://fallback.com', title: 'Fallback' }],
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    const provider = new ResponsesApiSearchProvider({
+      apiBase: 'https://my-proxy.com/v1',
+      apiKey: 'sk-test',
+      model: 'gpt-4.1-mini',
+    });
+
+    const results = await provider.search('craft', 5);
+
+    expect(calledModels).toEqual(['gpt-4.1-mini', 'gpt-4o-mini']);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.url).toBe('https://fallback.com');
+  });
+
+  it('does not retry on non-model errors', async () => {
+    const calledModels: string[] = [];
+
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const calledBody = init?.body ? JSON.parse(String(init.body)) : null;
+      calledModels.push(calledBody?.model);
+
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: 'rate_limit',
+            message: 'too many requests',
+            type: 'api_error',
+          },
+        }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    const provider = new ResponsesApiSearchProvider({
+      apiBase: 'https://my-proxy.com/v1',
+      apiKey: 'sk-test',
+      model: 'gpt-4.1-mini',
+    });
+
+    await expect(provider.search('craft', 5)).rejects.toThrow('HTTP 429');
+    expect(calledModels).toEqual(['gpt-4.1-mini']);
+  });
+
+  it('parses SSE payload when provider returns text/event-stream', async () => {
+    globalThis.fetch = (async () => {
+      const sse = [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"id":"resp_1"}}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"SSE text","annotations":[{"type":"url_citation","url":"https://sse.example.com","title":"SSE"}]}]}]}}',
+        '',
+      ].join('\n');
+
+      return new Response(sse, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    }) as typeof fetch;
+
+    const provider = new ResponsesApiSearchProvider({
+      apiBase: 'https://my-proxy.com/v1',
+      apiKey: 'sk-test',
+    });
+
+    const results = await provider.search('craft', 5);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.url).toBe('https://sse.example.com');
+  });
+
+  it('parses SSE payload even when content-type is not event-stream', async () => {
+    globalThis.fetch = (async () => {
+      const sse = [
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"SSE text 2","annotations":[{"type":"url_citation","url":"https://sse2.example.com","title":"SSE2"}]}]}]}}',
+        '',
+      ].join('\n');
+
+      return new Response(sse, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    const provider = new ResponsesApiSearchProvider({
+      apiBase: 'https://my-proxy.com/v1',
+      apiKey: 'sk-test',
+    });
+
+    const results = await provider.search('craft', 5);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.url).toBe('https://sse2.example.com');
+  });
 });

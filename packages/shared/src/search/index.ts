@@ -1,1 +1,2 @@
-export { fuzzyFilter, fuzzyScore, fuzzyMatch, type FuzzyResult } from './fuzzy'
+export * from './fuzzy.ts';
+export * from './provider.ts';
