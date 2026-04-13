@@ -37,7 +37,7 @@ describe('resolveServerPath fallback', () => {
     expect(paths.piServerPath).toBe(join(serverDir, 'index.js'));
   });
 
-  it('prefers resources/ over dist/resources/ when both exist', () => {
+  it('prefers dist/resources/ over resources/ when both exist', () => {
     const appRoot = join(tmpBase, 'app2');
 
     // Create both paths
@@ -55,7 +55,7 @@ describe('resolveServerPath fallback', () => {
     };
 
     const paths = resolveBackendRuntimePaths(hostRuntime);
-    expect(paths.piServerPath).toBe(join(primaryDir, 'index.js'));
+    expect(paths.piServerPath).toBe(join(fallbackDir, 'index.js'));
   });
 });
 
