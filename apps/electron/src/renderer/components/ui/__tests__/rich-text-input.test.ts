@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'bun:test'
-import { hasInputSnapshotChanged, isEscapeDuringComposition, isInputDuringComposition } from '../rich-text-input'
+import {
+  hasInputSnapshotChanged,
+  isEscapeDuringComposition,
+  isInputDuringComposition,
+  shouldShowRichInputPlaceholder,
+} from '../rich-text-input'
 
 describe('isEscapeDuringComposition', () => {
   it('returns true for Escape when local composition ref is active', () => {
@@ -70,5 +75,20 @@ describe('hasInputSnapshotChanged', () => {
       { text: '你', cursor: 1 },
       { text: '你好', cursor: 2 }
     )).toBe(true)
+  })
+})
+
+describe('shouldShowRichInputPlaceholder', () => {
+  it('hides placeholder while composition is active even when value is empty', () => {
+    expect(shouldShowRichInputPlaceholder('', true)).toBe(false)
+  })
+
+  it('shows placeholder when value is empty and composition is not active', () => {
+    expect(shouldShowRichInputPlaceholder('', false)).toBe(true)
+  })
+
+  it('hides placeholder when value is non-empty regardless of composition state', () => {
+    expect(shouldShowRichInputPlaceholder('你', false)).toBe(false)
+    expect(shouldShowRichInputPlaceholder('你', true)).toBe(false)
   })
 })

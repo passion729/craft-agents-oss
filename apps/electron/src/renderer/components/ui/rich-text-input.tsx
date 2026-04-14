@@ -78,6 +78,13 @@ export function hasInputSnapshotChanged(
   return previous.text !== next.text || previous.cursor !== next.cursor
 }
 
+export function shouldShowRichInputPlaceholder(
+  value: string,
+  isComposingForPlaceholder: boolean
+): boolean {
+  return !value && !isComposingForPlaceholder
+}
+
 export interface RichTextInputProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange' | 'onInput' | 'onPaste'> {
   /** Current text value */
   value: string
@@ -556,6 +563,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
   ) {
     const divRef = React.useRef<HTMLDivElement>(null)
     const [isFocused, setIsFocused] = React.useState(false)
+    const [isComposingForPlaceholder, setIsComposingForPlaceholder] = React.useState(false)
     const isComposing = React.useRef(false)
     const lastValueRef = React.useRef(value)
     const cursorPositionRef = React.useRef(0)
@@ -628,7 +636,11 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
       if (!divRef.current) return
 
       const composing = isInputDuringComposition(event as CompositionInputEventLike | undefined, isComposing.current)
-      if (composing) return
+      if (composing) {
+        // Keep placeholder hidden for IME pre-edit text even before parent value updates.
+        setIsComposingForPlaceholder(true)
+        return
+      }
 
       const inputType = (event as CompositionInputEventLike | undefined)?.nativeEvent?.inputType
         ?? (event as CompositionInputEventLike | undefined)?.inputType
@@ -664,10 +676,12 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     // Handle composition (IME)
     const handleCompositionStart = React.useCallback(() => {
       isComposing.current = true
+      setIsComposingForPlaceholder(true)
     }, [])
 
     const handleCompositionEnd = React.useCallback(() => {
       isComposing.current = false
+      setIsComposingForPlaceholder(false)
       // Emit the committed text exactly once after composition ends.
       handleInput()
     }, [handleInput])
@@ -722,6 +736,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     // Handle blur
     const handleBlur = React.useCallback((e: React.FocusEvent<HTMLDivElement>) => {
       setIsFocused(false)
+      setIsComposingForPlaceholder(false)
       onBlur?.(e)
     }, [onBlur])
 
@@ -803,7 +818,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     }, [])
 
     // Show placeholder when input is empty (regardless of focus state)
-    const showPlaceholder = !value
+    const showPlaceholder = shouldShowRichInputPlaceholder(value, isComposingForPlaceholder)
 
     // Normalize placeholder to array for RotatingPlaceholder
     const placeholderArray = React.useMemo(() => {
