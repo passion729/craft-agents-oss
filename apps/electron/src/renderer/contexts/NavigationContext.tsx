@@ -52,6 +52,10 @@ import { parsePermissionMode } from '@craft-agent/shared/agent/mode-types'
 import { NAVIGATE_EVENT, type NavigateOptions } from '../lib/navigate'
 import { normalizePanelRouteForReconcile } from './navigation-reconcile'
 import { buildSemanticHistoryKey, canRunInitialRestore } from './navigation-history'
+import {
+  buildLastSelectedSessionStorageSuffix,
+  resolveLastSelectedSessionIdForFilter,
+} from './navigation-session-memory'
 import * as storage from '@/lib/local-storage'
 import type {
   DeepLinkNavigation,
@@ -518,7 +522,8 @@ export function NavigationProvider({
         // still reflects the old workspace's focused panel)
         const meta = store.get(sessionMetaMapAtom).get(navigationState.details.sessionId)
         if (meta && meta.workspaceId === workspaceId) {
-          storage.set(storage.KEYS.lastSelectedSessionId, navigationState.details.sessionId, workspaceId)
+          const suffix = buildLastSelectedSessionStorageSuffix(workspaceId, navigationState.filter)
+          storage.set(storage.KEYS.lastSelectedSessionId, navigationState.details.sessionId, suffix)
         }
       }
     }
@@ -575,14 +580,14 @@ export function NavigationProvider({
   const getLastSelectedSessionId = useCallback(
     (filter: SessionFilter): string | null => {
       if (!workspaceId) return null
-      const storedId = storage.get<string | null>(
-        storage.KEYS.lastSelectedSessionId,
-        null,
-        workspaceId
-      )
-      if (!storedId) return null
       const filtered = filterSessionsByFilter(filter)
-      return filtered.some(session => session.id === storedId) ? storedId : null
+      return resolveLastSelectedSessionIdForFilter({
+        workspaceId,
+        filter,
+        sessionIdsInFilter: filtered.map((session) => session.id),
+        getScopedValue: (suffix) => storage.get<string | null>(storage.KEYS.lastSelectedSessionId, null, suffix),
+        getLegacyWorkspaceValue: (ws) => storage.get<string | null>(storage.KEYS.lastSelectedSessionId, null, ws),
+      })
     },
     [workspaceId, filterSessionsByFilter]
   )
@@ -904,7 +909,8 @@ export function NavigationProvider({
 
         // Persist last selected session for auto-select on next visit
         if (isSessionsNavigation(resolvedState) && resolvedState.details && workspaceId) {
-          storage.set(storage.KEYS.lastSelectedSessionId, resolvedState.details.sessionId, workspaceId)
+          const suffix = buildLastSelectedSessionStorageSuffix(workspaceId, resolvedState.filter)
+          storage.set(storage.KEYS.lastSelectedSessionId, resolvedState.details.sessionId, suffix)
         }
 
         // Update the focused panel's route (atom update is synchronous)
