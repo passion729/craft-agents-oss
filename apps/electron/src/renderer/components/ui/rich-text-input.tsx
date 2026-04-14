@@ -26,6 +26,24 @@ export interface EscapeCompositionEventLike {
   }
 }
 
+export interface CompositionInputEventLike {
+  isComposing?: boolean
+  inputType?: string | null
+  nativeEvent?: {
+    isComposing?: boolean
+    inputType?: string | null
+  }
+}
+
+export interface RichTextInputChangeMeta {
+  /** Whether this event was considered part of IME composition */
+  isComposing: boolean
+  /** Native InputEvent.inputType when available */
+  inputType: string | null
+}
+
+const COMPOSITION_INPUT_TYPES = new Set(['insertCompositionText', 'deleteCompositionText'])
+
 /**
  * Returns true when Escape is pressed while IME composition is active.
  *
@@ -38,6 +56,26 @@ export function isEscapeDuringComposition(
 ): boolean {
   if (event.key !== 'Escape') return false
   return Boolean(isComposingRefActive || event.isComposing || event.nativeEvent?.isComposing)
+}
+
+export function isInputDuringComposition(
+  event: CompositionInputEventLike | undefined,
+  isComposingRefActive: boolean
+): boolean {
+  const inputType = event?.nativeEvent?.inputType ?? event?.inputType
+  return Boolean(
+    isComposingRefActive
+    || event?.isComposing
+    || event?.nativeEvent?.isComposing
+    || (inputType && COMPOSITION_INPUT_TYPES.has(inputType))
+  )
+}
+
+export function hasInputSnapshotChanged(
+  previous: { text: string; cursor: number },
+  next: { text: string; cursor: number }
+): boolean {
+  return previous.text !== next.text || previous.cursor !== next.cursor
 }
 
 export interface RichTextInputProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange' | 'onInput' | 'onPaste'> {
@@ -55,8 +93,8 @@ export interface RichTextInputProps extends Omit<React.HTMLAttributes<HTMLDivEle
   workspaceId?: string
   /** Whether the input is disabled */
   disabled?: boolean
-  /** Called when input changes (provides value and cursor position for mention detection) */
-  onInput?: (value: string, cursorPosition: number) => void
+  /** Called when input changes (provides value, cursor and composition metadata) */
+  onInput?: (value: string, cursorPosition: number, meta: RichTextInputChangeMeta) => void
   /** Called on paste */
   onPaste?: (e: React.ClipboardEvent) => void
   /** Called when pasted text exceeds line threshold - should create file attachment */
@@ -586,12 +624,22 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     }), [])
 
     // Handle input events
-    const handleInput = React.useCallback(() => {
-      if (isComposing.current) return
+    const handleInput = React.useCallback((event?: React.FormEvent<HTMLDivElement>) => {
       if (!divRef.current) return
 
+      const composing = isInputDuringComposition(event as CompositionInputEventLike | undefined, isComposing.current)
+      if (composing) return
+
+      const inputType = (event as CompositionInputEventLike | undefined)?.nativeEvent?.inputType
+        ?? (event as CompositionInputEventLike | undefined)?.inputType
+        ?? null
       const newText = getTextFromElement(divRef.current)
       const cursorPos = getCursorPosition(divRef.current, cursorPositionRef.current)
+      const previousSnapshot = { text: lastValueRef.current, cursor: cursorPositionRef.current }
+      const nextSnapshot = { text: newText, cursor: cursorPos }
+
+      // Avoid duplicate emits around composition commit ordering differences.
+      if (!hasInputSnapshotChanged(previousSnapshot, nextSnapshot)) return
 
       lastValueRef.current = newText
       cursorPositionRef.current = cursorPos
@@ -610,7 +658,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
       }
 
       onChange(newText)
-      onInput?.(newText, cursorPos)
+      onInput?.(newText, cursorPos, { isComposing: false, inputType })
     }, [onChange, onInput, skills, sources, skillSlugs, sourceSlugs, workspaceId])
 
     // Handle composition (IME)
@@ -620,6 +668,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
 
     const handleCompositionEnd = React.useCallback(() => {
       isComposing.current = false
+      // Emit the committed text exactly once after composition ends.
       handleInput()
     }, [handleInput])
 

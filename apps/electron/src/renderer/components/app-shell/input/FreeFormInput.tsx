@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/label-menu'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { parseMentions } from '@/lib/mentions'
-import { RichTextInput, type RichTextInputHandle } from '@/components/ui/rich-text-input'
+import { RichTextInput, type RichTextInputChangeMeta, type RichTextInputHandle } from '@/components/ui/rich-text-input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import {
   DropdownMenu,
@@ -81,6 +81,7 @@ import {
   removeRecentWorkingDir,
 } from './working-directory-history'
 import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
+import { shouldSkipRichInputProcessing } from './composition-guards'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -1426,7 +1427,11 @@ export function FreeFormInput({
   }, [syncToParent, sources, optimisticSourceSlugs, onSourcesChange])
 
   // Handle input with cursor position (for menu detection)
-  const handleRichInput = React.useCallback((value: string, cursorPosition: number) => {
+  const handleRichInput = React.useCallback((value: string, cursorPosition: number, meta: RichTextInputChangeMeta) => {
+    if (shouldSkipRichInputProcessing(meta)) {
+      return
+    }
+
     // Update inline slash command state
     inlineSlash.handleInputChange(value, cursorPosition)
 
