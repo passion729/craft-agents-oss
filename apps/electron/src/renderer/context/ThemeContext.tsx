@@ -12,18 +12,50 @@ import {
 } from '@config/theme'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
-export type FontFamily = 'inter' | 'system'
+export type LegacyFontFamily = 'inter' | 'system'
+export type BodyFontPreset = 'system' | 'inter' | 'custom'
+export type MonoFontPreset = 'jetbrains' | 'system' | 'custom'
+
+const MIN_BASE_FONT_SIZE = 12
+const MAX_BASE_FONT_SIZE = 20
+const DEFAULT_BASE_FONT_SIZE = 15
+
+const DEFAULT_BODY_FONT_PRESET: BodyFontPreset = 'system'
+const DEFAULT_MONO_FONT_PRESET: MonoFontPreset = 'jetbrains'
+
+const SYSTEM_SANS_FONT_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+const INTER_SANS_FONT_STACK = '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+const JETBRAINS_MONO_FONT_STACK = '"JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace'
+const SYSTEM_MONO_FONT_STACK = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace'
+
+interface ThemePreferencesPayload {
+  mode: ThemeMode
+  colorTheme: string
+  bodyFontPreset: BodyFontPreset
+  bodyFontCustom: string
+  monoFontPreset: MonoFontPreset
+  monoFontCustom: string
+  baseFontSize: number
+}
 
 interface ThemeContextType {
   // Preferences (persisted at app level)
   mode: ThemeMode
   /** App-level default color theme (used when workspace has no override) */
   colorTheme: string
-  font: FontFamily
+  bodyFontPreset: BodyFontPreset
+  bodyFontCustom: string
+  monoFontPreset: MonoFontPreset
+  monoFontCustom: string
+  baseFontSize: number
   setMode: (mode: ThemeMode) => void
   /** Set app-level default color theme */
   setColorTheme: (theme: string) => void
-  setFont: (font: FontFamily) => void
+  setBodyFontPreset: (preset: BodyFontPreset) => void
+  setBodyFontCustom: (fontFamily: string) => void
+  setMonoFontPreset: (preset: MonoFontPreset) => void
+  setMonoFontCustom: (fontFamily: string) => void
+  setBaseFontSize: (size: number) => void
 
   // Workspace-level theme override
   /** Active workspace ID (null if no workspace context) */
@@ -65,10 +97,20 @@ interface ThemeContextType {
 }
 
 interface StoredTheme {
-  mode: ThemeMode
-  colorTheme: string
-  font?: FontFamily
+  mode?: ThemeMode
+  colorTheme?: string
+  bodyFontPreset?: BodyFontPreset
+  bodyFontCustom?: string
+  monoFontPreset?: MonoFontPreset
+  monoFontCustom?: string
+  baseFontSize?: number
+  /** Legacy field kept for backwards-compatible migration only. */
+  font?: LegacyFontFamily
   /** True when user explicitly changed theme in UI (not auto-saved on startup) */
+  isUserOverride?: boolean
+}
+
+interface NormalizedThemePreferences extends ThemePreferencesPayload {
   isUserOverride?: boolean
 }
 
@@ -91,7 +133,9 @@ interface ThemeProviderProps {
   children: ReactNode
   defaultMode?: ThemeMode
   defaultColorTheme?: string
-  defaultFont?: FontFamily
+  defaultBodyFontPreset?: BodyFontPreset
+  defaultMonoFontPreset?: MonoFontPreset
+  defaultBaseFontSize?: number
   /** Active workspace ID for workspace-level theme overrides */
   activeWorkspaceId?: string | null
 }
@@ -103,6 +147,28 @@ function getSystemPreference(): 'light' | 'dark' {
   return 'light'
 }
 
+function normalizeThemeMode(value: unknown, fallback: ThemeMode): ThemeMode {
+  if (value === 'light' || value === 'dark' || value === 'system') return value
+  return fallback
+}
+
+function normalizeBodyFontPreset(value: unknown, fallback: BodyFontPreset): BodyFontPreset {
+  if (value === 'system' || value === 'inter' || value === 'custom') return value
+  return fallback
+}
+
+function normalizeMonoFontPreset(value: unknown, fallback: MonoFontPreset): MonoFontPreset {
+  if (value === 'jetbrains' || value === 'system' || value === 'custom') return value
+  return fallback
+}
+
+function normalizeBaseFontSize(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  const rounded = Math.round(parsed)
+  return Math.min(MAX_BASE_FONT_SIZE, Math.max(MIN_BASE_FONT_SIZE, rounded))
+}
+
 function loadStoredTheme(): StoredTheme | null {
   if (typeof window === 'undefined') return null
   return storage.get<StoredTheme | null>(storage.KEYS.theme, null)
@@ -112,25 +178,88 @@ function saveTheme(theme: StoredTheme): void {
   storage.set(storage.KEYS.theme, theme)
 }
 
+function isLegacyFontOnlyTheme(stored: StoredTheme | null): boolean {
+  if (!stored || !stored.font) return false
+  return (
+    stored.bodyFontPreset === undefined &&
+    stored.bodyFontCustom === undefined &&
+    stored.monoFontPreset === undefined &&
+    stored.monoFontCustom === undefined &&
+    stored.baseFontSize === undefined
+  )
+}
+
+function normalizeStoredTheme(
+  stored: StoredTheme | null,
+  defaults: {
+    mode: ThemeMode
+    colorTheme: string
+    bodyFontPreset: BodyFontPreset
+    monoFontPreset: MonoFontPreset
+    baseFontSize: number
+  }
+): NormalizedThemePreferences {
+  const legacyBodyPreset: BodyFontPreset = stored?.font === 'inter' ? 'inter' : defaults.bodyFontPreset
+
+  return {
+    mode: normalizeThemeMode(stored?.mode, defaults.mode),
+    colorTheme: typeof stored?.colorTheme === 'string' && stored.colorTheme.length > 0
+      ? stored.colorTheme
+      : defaults.colorTheme,
+    bodyFontPreset: normalizeBodyFontPreset(stored?.bodyFontPreset, legacyBodyPreset),
+    bodyFontCustom: typeof stored?.bodyFontCustom === 'string' ? stored.bodyFontCustom : '',
+    monoFontPreset: normalizeMonoFontPreset(stored?.monoFontPreset, defaults.monoFontPreset),
+    monoFontCustom: typeof stored?.monoFontCustom === 'string' ? stored.monoFontCustom : '',
+    baseFontSize: normalizeBaseFontSize(stored?.baseFontSize, defaults.baseFontSize),
+    isUserOverride: stored?.isUserOverride,
+  }
+}
+
+function toStoredTheme(preferences: ThemePreferencesPayload, isUserOverride?: boolean): StoredTheme {
+  return {
+    mode: preferences.mode,
+    colorTheme: preferences.colorTheme,
+    bodyFontPreset: preferences.bodyFontPreset,
+    bodyFontCustom: preferences.bodyFontCustom,
+    monoFontPreset: preferences.monoFontPreset,
+    monoFontCustom: preferences.monoFontCustom,
+    baseFontSize: preferences.baseFontSize,
+    isUserOverride,
+  }
+}
+
 export function ThemeProvider({
   children,
   defaultMode = 'system',
   defaultColorTheme = 'default',
-  defaultFont = 'system',
+  defaultBodyFontPreset = DEFAULT_BODY_FONT_PRESET,
+  defaultMonoFontPreset = DEFAULT_MONO_FONT_PRESET,
+  defaultBaseFontSize = DEFAULT_BASE_FONT_SIZE,
   activeWorkspaceId = null
 }: ThemeProviderProps) {
-  const stored = loadStoredTheme()
+  const initialStoredTheme = loadStoredTheme()
+  const initialPreferences = normalizeStoredTheme(initialStoredTheme, {
+    mode: defaultMode,
+    colorTheme: defaultColorTheme,
+    bodyFontPreset: defaultBodyFontPreset,
+    monoFontPreset: defaultMonoFontPreset,
+    baseFontSize: defaultBaseFontSize,
+  })
 
   // === Preference state (persisted at app level) ===
-  const [mode, setModeState] = useState<ThemeMode>(stored?.mode ?? defaultMode)
+  const [mode, setModeState] = useState<ThemeMode>(initialPreferences.mode)
   // Only use localStorage colorTheme if user explicitly set it via UI
   const [colorTheme, setColorThemeState] = useState<string>(() => {
-    if (stored?.isUserOverride && stored.colorTheme) {
-      return stored.colorTheme
+    if (initialPreferences.isUserOverride && initialPreferences.colorTheme) {
+      return initialPreferences.colorTheme
     }
     return defaultColorTheme // Will be updated by config.json effect
   })
-  const [font, setFontState] = useState<FontFamily>(stored?.font ?? defaultFont)
+  const [bodyFontPreset, setBodyFontPresetState] = useState<BodyFontPreset>(initialPreferences.bodyFontPreset)
+  const [bodyFontCustom, setBodyFontCustomState] = useState<string>(initialPreferences.bodyFontCustom)
+  const [monoFontPreset, setMonoFontPresetState] = useState<MonoFontPreset>(initialPreferences.monoFontPreset)
+  const [monoFontCustom, setMonoFontCustomState] = useState<string>(initialPreferences.monoFontCustom)
+  const [baseFontSize, setBaseFontSizeState] = useState<number>(initialPreferences.baseFontSize)
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemPreference)
   const [previewColorTheme, setPreviewColorTheme] = useState<string | null>(null)
 
@@ -140,10 +269,44 @@ export function ThemeProvider({
   // Track if we're receiving an external update to prevent echo broadcasts
   const isExternalUpdate = useRef(false)
 
+  const toThemePreferences = useCallback(
+    (overrides: Partial<ThemePreferencesPayload> = {}): ThemePreferencesPayload => ({
+      mode,
+      colorTheme,
+      bodyFontPreset,
+      bodyFontCustom,
+      monoFontPreset,
+      monoFontCustom,
+      baseFontSize,
+      ...overrides,
+    }),
+    [mode, colorTheme, bodyFontPreset, bodyFontCustom, monoFontPreset, monoFontCustom, baseFontSize]
+  )
+
+  const persistAndBroadcast = useCallback(
+    (preferences: ThemePreferencesPayload, options: { forceUserOverride?: boolean } = {}) => {
+      const existing = loadStoredTheme()
+      const isUserOverride = options.forceUserOverride ?? existing?.isUserOverride
+      saveTheme(toStoredTheme(preferences, isUserOverride))
+
+      if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
+        window.electronAPI.broadcastThemePreferences(preferences)
+      }
+    },
+    []
+  )
+
+  // Migrate legacy localStorage shape ({ font: 'inter' | 'system' }) on first mount.
+  useEffect(() => {
+    if (!isLegacyFontOnlyTheme(initialStoredTheme)) return
+    saveTheme(toStoredTheme(initialPreferences, initialPreferences.isUserOverride))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Load app-level colorTheme from config.json on mount (only if user hasn't overridden)
   useEffect(() => {
     // Skip if user has explicitly set a theme via UI
-    if (stored?.isUserOverride) return
+    if (initialPreferences.isUserOverride) return
 
     window.electronAPI?.getColorTheme?.().then((configTheme) => {
       if (configTheme && configTheme !== 'default') {
@@ -167,6 +330,28 @@ export function ThemeProvider({
   const effectiveColorThemeSource: 'preview' | 'workspace' | 'app' =
     previewColorTheme !== null ? 'preview' : workspaceColorTheme !== null ? 'workspace' : 'app'
   const isDarkFromMode = resolvedMode === 'dark'
+
+  const resolvedBodyFont = useMemo(() => {
+    const custom = bodyFontCustom.trim()
+    if (bodyFontPreset === 'custom') {
+      return custom || SYSTEM_SANS_FONT_STACK
+    }
+    if (bodyFontPreset === 'inter') {
+      return INTER_SANS_FONT_STACK
+    }
+    return SYSTEM_SANS_FONT_STACK
+  }, [bodyFontPreset, bodyFontCustom])
+
+  const resolvedMonoFont = useMemo(() => {
+    const custom = monoFontCustom.trim()
+    if (monoFontPreset === 'custom') {
+      return custom || JETBRAINS_MONO_FONT_STACK
+    }
+    if (monoFontPreset === 'system') {
+      return SYSTEM_MONO_FONT_STACK
+    }
+    return JETBRAINS_MONO_FONT_STACK
+  }, [monoFontPreset, monoFontCustom])
 
   // Load workspace theme override when workspace changes
   useEffect(() => {
@@ -283,16 +468,21 @@ export function ThemeProvider({
 
   // === DOM Effects (SINGLETON - all theme DOM manipulation happens here) ===
 
-  // Apply base theme class and data attributes
+  // Apply base theme class, typography variables, and data attributes
   useEffect(() => {
     const root = document.documentElement
 
-    // Apply font
-    if (font === 'inter') {
+    // Preserve Inter-specific optical settings only when Inter preset is selected.
+    if (bodyFontPreset === 'inter') {
       root.dataset.font = 'inter'
     } else {
       delete root.dataset.font
     }
+
+    root.style.setProperty('--font-sans', resolvedBodyFont)
+    root.style.setProperty('--font-default', 'var(--font-sans)')
+    root.style.setProperty('--font-mono', resolvedMonoFont)
+    root.style.setProperty('--font-size-base', `${baseFontSize}px`)
 
     // Apply color theme data attribute
     if (effectiveColorTheme && effectiveColorTheme !== 'default') {
@@ -303,7 +493,7 @@ export function ThemeProvider({
 
     // Always set theme override for semi-transparent background (vibrancy effect)
     root.dataset.themeOverride = 'true'
-  }, [effectiveColorTheme, font])
+  }, [effectiveColorTheme, bodyFontPreset, resolvedBodyFont, resolvedMonoFont, baseFontSize])
 
   // Apply dark/light class and theme-specific DOM attributes
   // This runs when preset loads or mode changes
@@ -311,11 +501,11 @@ export function ThemeProvider({
     const root = document.documentElement
 
     // Check if this is a dark-only theme (forces dark mode)
-    const isDarkOnlyTheme = presetTheme?.supportedModes?.length === 1 && presetTheme.supportedModes[0] === 'dark'
+    const darkOnlyTheme = presetTheme?.supportedModes?.length === 1 && presetTheme.supportedModes[0] === 'dark'
 
     // Apply mode class
     // Scenic and dark-only themes force dark mode
-    const effectiveMode = (isScenic || isDarkOnlyTheme) ? 'dark' : resolvedMode
+    const effectiveMode = (isScenic || darkOnlyTheme) ? 'dark' : resolvedMode
     root.classList.remove('light', 'dark')
     root.classList.add(effectiveMode)
 
@@ -391,15 +581,15 @@ export function ThemeProvider({
     // Listen via Electron IPC if available (more reliable on macOS)
     let cleanup: (() => void) | undefined
     if (window.electronAPI?.onSystemThemeChange) {
-      cleanup = window.electronAPI.onSystemThemeChange((isDark) => {
-        setSystemPreference(isDark ? 'dark' : 'light')
+      cleanup = window.electronAPI.onSystemThemeChange((darkModeEnabled) => {
+        setSystemPreference(darkModeEnabled ? 'dark' : 'light')
       })
     }
 
     // Fetch initial system theme from Electron
     if (window.electronAPI?.getSystemTheme) {
-      window.electronAPI.getSystemTheme().then((isDark) => {
-        setSystemPreference(isDark ? 'dark' : 'light')
+      window.electronAPI.getSystemTheme().then((darkModeEnabled) => {
+        setSystemPreference(darkModeEnabled ? 'dark' : 'light')
       })
     }
 
@@ -415,53 +605,79 @@ export function ThemeProvider({
 
     const cleanup = window.electronAPI.onThemePreferencesChange((preferences) => {
       isExternalUpdate.current = true
-      setModeState(preferences.mode as ThemeMode)
+
+      setModeState(normalizeThemeMode(preferences.mode, defaultMode))
       setColorThemeState(preferences.colorTheme)
-      setFontState(preferences.font as FontFamily)
+      setBodyFontPresetState(normalizeBodyFontPreset(preferences.bodyFontPreset, DEFAULT_BODY_FONT_PRESET))
+      setBodyFontCustomState(typeof preferences.bodyFontCustom === 'string' ? preferences.bodyFontCustom : '')
+      setMonoFontPresetState(normalizeMonoFontPreset(preferences.monoFontPreset, DEFAULT_MONO_FONT_PRESET))
+      setMonoFontCustomState(typeof preferences.monoFontCustom === 'string' ? preferences.monoFontCustom : '')
+      setBaseFontSizeState(normalizeBaseFontSize(preferences.baseFontSize, DEFAULT_BASE_FONT_SIZE))
+
       // When syncing from another window, mark as user override since user explicitly changed theme
-      saveTheme({
-        mode: preferences.mode as ThemeMode,
+      const normalizedPreferences = {
+        mode: normalizeThemeMode(preferences.mode, defaultMode),
         colorTheme: preferences.colorTheme,
-        font: preferences.font as FontFamily,
-        isUserOverride: true
-      })
+        bodyFontPreset: normalizeBodyFontPreset(preferences.bodyFontPreset, DEFAULT_BODY_FONT_PRESET),
+        bodyFontCustom: typeof preferences.bodyFontCustom === 'string' ? preferences.bodyFontCustom : '',
+        monoFontPreset: normalizeMonoFontPreset(preferences.monoFontPreset, DEFAULT_MONO_FONT_PRESET),
+        monoFontCustom: typeof preferences.monoFontCustom === 'string' ? preferences.monoFontCustom : '',
+        baseFontSize: normalizeBaseFontSize(preferences.baseFontSize, DEFAULT_BASE_FONT_SIZE),
+      } as ThemePreferencesPayload
+      saveTheme(toStoredTheme(normalizedPreferences, true))
+
       setTimeout(() => {
         isExternalUpdate.current = false
       }, 0)
     })
 
     return cleanup
-  }, [])
+  }, [defaultMode])
 
   // === Setters with persistence and broadcast ===
   const setMode = useCallback((newMode: ThemeMode) => {
     setModeState(newMode)
-    // Preserve existing isUserOverride flag
-    const existing = loadStoredTheme()
-    saveTheme({ mode: newMode, colorTheme, font, isUserOverride: existing?.isUserOverride })
-    if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
-      window.electronAPI.broadcastThemePreferences({ mode: newMode, colorTheme, font })
-    }
-  }, [colorTheme, font])
+    const next = toThemePreferences({ mode: newMode })
+    persistAndBroadcast(next)
+  }, [toThemePreferences, persistAndBroadcast])
 
   const setColorTheme = useCallback((newTheme: string) => {
     setColorThemeState(newTheme)
+    const next = toThemePreferences({ colorTheme: newTheme })
     // Mark as user override - user explicitly changed theme via UI
-    saveTheme({ mode, colorTheme: newTheme, font, isUserOverride: true })
-    if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
-      window.electronAPI.broadcastThemePreferences({ mode, colorTheme: newTheme, font })
-    }
-  }, [mode, font])
+    persistAndBroadcast(next, { forceUserOverride: true })
+  }, [toThemePreferences, persistAndBroadcast])
 
-  const setFont = useCallback((newFont: FontFamily) => {
-    setFontState(newFont)
-    // Preserve existing isUserOverride flag
-    const existing = loadStoredTheme()
-    saveTheme({ mode, colorTheme, font: newFont, isUserOverride: existing?.isUserOverride })
-    if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
-      window.electronAPI.broadcastThemePreferences({ mode, colorTheme, font: newFont })
-    }
-  }, [mode, colorTheme])
+  const setBodyFontPreset = useCallback((preset: BodyFontPreset) => {
+    setBodyFontPresetState(preset)
+    const next = toThemePreferences({ bodyFontPreset: preset })
+    persistAndBroadcast(next)
+  }, [toThemePreferences, persistAndBroadcast])
+
+  const setBodyFontCustom = useCallback((fontFamily: string) => {
+    setBodyFontCustomState(fontFamily)
+    const next = toThemePreferences({ bodyFontCustom: fontFamily })
+    persistAndBroadcast(next)
+  }, [toThemePreferences, persistAndBroadcast])
+
+  const setMonoFontPreset = useCallback((preset: MonoFontPreset) => {
+    setMonoFontPresetState(preset)
+    const next = toThemePreferences({ monoFontPreset: preset })
+    persistAndBroadcast(next)
+  }, [toThemePreferences, persistAndBroadcast])
+
+  const setMonoFontCustom = useCallback((fontFamily: string) => {
+    setMonoFontCustomState(fontFamily)
+    const next = toThemePreferences({ monoFontCustom: fontFamily })
+    persistAndBroadcast(next)
+  }, [toThemePreferences, persistAndBroadcast])
+
+  const setBaseFontSize = useCallback((size: number) => {
+    const normalized = normalizeBaseFontSize(size, baseFontSize)
+    setBaseFontSizeState(normalized)
+    const next = toThemePreferences({ baseFontSize: normalized })
+    persistAndBroadcast(next)
+  }, [baseFontSize, toThemePreferences, persistAndBroadcast])
 
   // Set workspace-specific color theme override
   const setWorkspaceColorTheme = useCallback((newTheme: string | null) => {
@@ -492,10 +708,18 @@ export function ThemeProvider({
         // App-level preferences
         mode,
         colorTheme,
-        font,
+        bodyFontPreset,
+        bodyFontCustom,
+        monoFontPreset,
+        monoFontCustom,
+        baseFontSize,
         setMode,
         setColorTheme,
-        setFont,
+        setBodyFontPreset,
+        setBodyFontCustom,
+        setMonoFontPreset,
+        setMonoFontCustom,
+        setBaseFontSize,
 
         // Workspace-level theme override
         activeWorkspaceId,

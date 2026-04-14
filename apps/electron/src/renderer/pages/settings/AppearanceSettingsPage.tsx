@@ -1,7 +1,7 @@
 /**
  * AppearanceSettingsPage
  *
- * Visual customization settings: theme mode, color theme, font,
+ * Visual customization settings: theme mode, color theme, typography,
  * workspace-specific theme overrides, and CLI tool icon mappings.
  */
 
@@ -16,9 +16,10 @@ import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopo
 import { useTheme } from '@/context/ThemeContext'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { routes } from '@/lib/navigate'
+import { Input } from '@/components/ui/input'
 import { Monitor, Sun, Moon } from 'lucide-react'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import type { ToolIconMapping } from '../../../shared/types'
+import type { BodyFontPreset, MonoFontPreset, ToolIconMapping } from '../../../shared/types'
 
 import {
   SettingsSection,
@@ -103,14 +104,40 @@ export default function AppearanceSettingsPage() {
     setMode,
     colorTheme,
     setColorTheme,
-    font,
-    setFont,
+    bodyFontPreset,
+    setBodyFontPreset,
+    bodyFontCustom,
+    setBodyFontCustom,
+    monoFontPreset,
+    setMonoFontPreset,
+    monoFontCustom,
+    setMonoFontCustom,
+    baseFontSize,
+    setBaseFontSize,
     activeWorkspaceId,
     setWorkspaceColorTheme,
     themeLoadError,
     themeResolvedFrom,
   } = useTheme()
   const { workspaces } = useAppShellContext()
+
+  const [baseFontSizeInput, setBaseFontSizeInput] = useState(String(baseFontSize))
+  const [baseFontSizeError, setBaseFontSizeError] = useState<string | null>(null)
+  const [bodyFontCustomDraft, setBodyFontCustomDraft] = useState(bodyFontCustom)
+  const [monoFontCustomDraft, setMonoFontCustomDraft] = useState(monoFontCustom)
+
+  useEffect(() => {
+    setBaseFontSizeInput(String(baseFontSize))
+    setBaseFontSizeError(null)
+  }, [baseFontSize])
+
+  useEffect(() => {
+    setBodyFontCustomDraft(bodyFontCustom)
+  }, [bodyFontCustom])
+
+  useEffect(() => {
+    setMonoFontCustomDraft(monoFontCustom)
+  }, [monoFontCustom])
 
   // Fetch workspace icons as data URLs (file:// URLs don't work in renderer)
   const workspaceIconMap = useWorkspaceIcons(workspaces)
@@ -238,6 +265,36 @@ export default function AppearanceSettingsPage() {
     return preset?.theme.name || colorTheme
   }, [colorTheme, presetThemes])
 
+  const bodyFontOptions = useMemo(() => [
+    { value: 'system', label: t("settings.appearance.uiFontSystem") },
+    { value: 'inter', label: t("settings.appearance.uiFontInter") },
+    { value: 'custom', label: t("settings.appearance.fontCustom") },
+  ], [t])
+
+  const monoFontOptions = useMemo(() => [
+    { value: 'jetbrains', label: t("settings.appearance.monoFontJetBrains") },
+    { value: 'system', label: t("settings.appearance.monoFontSystem") },
+    { value: 'custom', label: t("settings.appearance.fontCustom") },
+  ], [t])
+
+  const parseAndApplyBaseFontSize = useCallback((raw: string): boolean => {
+    const trimmed = raw.trim()
+    const parsed = Number(trimmed)
+    const isInteger = Number.isInteger(parsed)
+    const isInRange = parsed >= 12 && parsed <= 20
+
+    if (!trimmed || !isInteger || !isInRange) {
+      setBaseFontSizeError(
+        t("settings.appearance.baseFontSizeError", { min: 12, max: 20 })
+      )
+      return false
+    }
+
+    setBaseFontSizeError(null)
+    setBaseFontSize(parsed)
+    return true
+  }, [setBaseFontSize, t])
+
   return (
     <div className="h-full flex flex-col">
       <PanelHeader
@@ -270,15 +327,77 @@ export default function AppearanceSettingsPage() {
                       options={themeOptions}
                     />
                   </SettingsRow>
-                  <SettingsRow label={t("settings.appearance.font")}>
-                    <SettingsSegmentedControl
-                      value={font}
-                      onValueChange={setFont}
-                      options={[
-                        { value: 'inter', label: t("settings.appearance.fontInter") },
-                        { value: 'system', label: t("settings.appearance.fontSystem") },
-                      ]}
+                  <SettingsRow label={t("settings.appearance.uiFont")}>
+                    <SettingsMenuSelect
+                      value={bodyFontPreset}
+                      onValueChange={(value) => setBodyFontPreset(value as BodyFontPreset)}
+                      options={bodyFontOptions}
                     />
+                  </SettingsRow>
+                  {bodyFontPreset === 'custom' && (
+                    <SettingsRow label={t("settings.appearance.uiFontCustom")}>
+                      <div className="w-[320px] rounded-md shadow-minimal has-[:focus-visible]:bg-background">
+                        <Input
+                          value={bodyFontCustomDraft}
+                          onChange={(e) => setBodyFontCustomDraft(e.target.value)}
+                          onBlur={() => {
+                            if (bodyFontCustomDraft !== bodyFontCustom) {
+                              setBodyFontCustom(bodyFontCustomDraft)
+                            }
+                          }}
+                          placeholder={t("settings.appearance.fontCustomPlaceholder")}
+                          className="bg-muted/50 border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent"
+                        />
+                      </div>
+                    </SettingsRow>
+                  )}
+                  <SettingsRow label={t("settings.appearance.monoFont")}>
+                    <SettingsMenuSelect
+                      value={monoFontPreset}
+                      onValueChange={(value) => setMonoFontPreset(value as MonoFontPreset)}
+                      options={monoFontOptions}
+                    />
+                  </SettingsRow>
+                  {monoFontPreset === 'custom' && (
+                    <SettingsRow label={t("settings.appearance.monoFontCustom")}>
+                      <div className="w-[320px] rounded-md shadow-minimal has-[:focus-visible]:bg-background">
+                        <Input
+                          value={monoFontCustomDraft}
+                          onChange={(e) => setMonoFontCustomDraft(e.target.value)}
+                          onBlur={() => {
+                            if (monoFontCustomDraft !== monoFontCustom) {
+                              setMonoFontCustom(monoFontCustomDraft)
+                            }
+                          }}
+                          placeholder={t("settings.appearance.fontCustomPlaceholder")}
+                          className="bg-muted/50 border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent"
+                        />
+                      </div>
+                    </SettingsRow>
+                  )}
+                  <SettingsRow
+                    label={t("settings.appearance.baseFontSize")}
+                    description={baseFontSizeError ?? undefined}
+                  >
+                    <div className="w-[120px] rounded-md shadow-minimal has-[:focus-visible]:bg-background">
+                      <Input
+                        value={baseFontSizeInput}
+                        inputMode="numeric"
+                        onChange={(e) => {
+                          const value = e.target.value
+                          setBaseFontSizeInput(value)
+                          parseAndApplyBaseFontSize(value)
+                        }}
+                        onBlur={() => {
+                          if (!parseAndApplyBaseFontSize(baseFontSizeInput)) {
+                            setBaseFontSizeInput(String(baseFontSize))
+                            setBaseFontSizeError(null)
+                          }
+                        }}
+                        placeholder={t("settings.appearance.baseFontSizePlaceholder")}
+                        className="bg-muted/50 border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent"
+                      />
+                    </div>
                   </SettingsRow>
                   <SettingsRow label={t("settings.appearance.language")}>
                     <SettingsMenuSelect

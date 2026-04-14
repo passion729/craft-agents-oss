@@ -33,7 +33,15 @@ export interface BroadcastEventMap {
   // Theme broadcasts (global)
   [RPC_CHANNELS.theme.APP_CHANGED]: [theme: ThemeOverrides | null]
   [RPC_CHANNELS.theme.SYSTEM_CHANGED]: [isDark: boolean]
-  [RPC_CHANNELS.theme.PREFERENCES_CHANGED]: [preferences: { mode: string; colorTheme: string; font: string }]
+  [RPC_CHANNELS.theme.PREFERENCES_CHANGED]: [preferences: {
+    mode: string
+    colorTheme: string
+    bodyFontPreset: 'system' | 'inter' | 'custom'
+    bodyFontCustom: string
+    monoFontPreset: 'jetbrains' | 'system' | 'custom'
+    monoFontCustom: string
+    baseFontSize: number
+  }]
   [RPC_CHANNELS.theme.WORKSPACE_THEME_CHANGED]: [data: { workspaceId: string; themeId: string | null }]
 
   // Update broadcasts (global)

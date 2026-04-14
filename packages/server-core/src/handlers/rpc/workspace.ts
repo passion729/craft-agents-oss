@@ -304,7 +304,15 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   })
 
   // Broadcast theme preferences to all other windows (for cross-window sync)
-  server.handle(RPC_CHANNELS.theme.BROADCAST_PREFERENCES, async (ctx, preferences: { mode: string; colorTheme: string; font: string }) => {
+  server.handle(RPC_CHANNELS.theme.BROADCAST_PREFERENCES, async (ctx, preferences: {
+    mode: string
+    colorTheme: string
+    bodyFontPreset: 'system' | 'inter' | 'custom'
+    bodyFontCustom: string
+    monoFontPreset: 'jetbrains' | 'system' | 'custom'
+    monoFontCustom: string
+    baseFontSize: number
+  }) => {
     pushTyped(server, RPC_CHANNELS.theme.PREFERENCES_CHANGED, { to: 'all' }, preferences)
   })
 

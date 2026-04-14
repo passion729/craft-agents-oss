@@ -101,6 +101,19 @@ export interface ToolIconMapping {
   commands: string[]
 }
 
+export type BodyFontPreset = 'system' | 'inter' | 'custom'
+export type MonoFontPreset = 'jetbrains' | 'system' | 'custom'
+
+export interface ThemePreferencesPayload {
+  mode: string
+  colorTheme: string
+  bodyFontPreset: BodyFontPreset
+  bodyFontCustom: string
+  monoFontPreset: MonoFontPreset
+  monoFontCustom: string
+  baseFontSize: number
+}
+
 /**
  * Browser pane creation options
  */
@@ -562,8 +575,8 @@ export interface ElectronAPI {
   onNotificationNavigate(callback: (data: { workspaceId: string; sessionId: string }) => void): () => void
 
   // Theme preferences sync across windows
-  broadcastThemePreferences(preferences: { mode: string; colorTheme: string; font: string }): Promise<void>
-  onThemePreferencesChange(callback: (preferences: { mode: string; colorTheme: string; font: string }) => void): () => void
+  broadcastThemePreferences(preferences: ThemePreferencesPayload): Promise<void>
+  onThemePreferencesChange(callback: (preferences: ThemePreferencesPayload) => void): () => void
 
   // Workspace theme sync across windows
   broadcastWorkspaceThemeChange(workspaceId: string, themeId: string | null): Promise<void>

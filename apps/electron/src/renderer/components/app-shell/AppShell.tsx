@@ -164,6 +164,14 @@ interface AppShellProps {
 type FilterMode = 'include' | 'exclude'
 
 const altClickTooltipLabel = isMac ? '⌥ click to exclude' : 'Alt click to exclude'
+const DEFAULT_BASE_FONT_SIZE = 15
+const SIDEBAR_MIN_WIDTH = 180
+const SIDEBAR_MAX_WIDTH = 320
+
+function getSidebarMinWidthForBaseFontSize(baseFontSize: number): number {
+  const scaled = Math.round(SIDEBAR_MIN_WIDTH * (baseFontSize / DEFAULT_BASE_FONT_SIZE))
+  return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, scaled))
+}
 
 /** Wraps children in a Tooltip that shows instantly on hover — only rendered when `show` is true. */
 function AltExcludeTooltip({ show, children }: { show: boolean; children: React.ReactNode }) {
@@ -574,7 +582,11 @@ function AppShellContent({
   const resizeHandleRef = React.useRef<HTMLDivElement>(null)
   const sessionListHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
-  const { resolvedMode, isDark, setMode } = useTheme()
+  const { resolvedMode, isDark, setMode, baseFontSize } = useTheme()
+  const sidebarMinWidth = React.useMemo(
+    () => getSidebarMinWidthForBaseFontSize(baseFontSize),
+    [baseFontSize]
+  )
   const { canGoBack, canGoForward, goBack, goForward, navigateToSource, navigateToSession } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
@@ -740,6 +752,17 @@ function AppShellContent({
   const chatDisplayRef = React.useRef<ChatDisplayHandle>(null)
   // Track match count and index from ChatDisplay (for SessionList navigation UI)
   const [chatMatchInfo, setChatMatchInfo] = React.useState<{ sessionId: string | null; count: number; index: number; isHighlighting?: boolean }>({ sessionId: null, count: 0, index: 0 })
+
+  // Keep sidebar width valid when global base font size changes.
+  React.useEffect(() => {
+    setSidebarWidth(prev => {
+      const clamped = Math.min(Math.max(prev, sidebarMinWidth), SIDEBAR_MAX_WIDTH)
+      if (clamped !== prev) {
+        storage.set(storage.KEYS.sidebarWidth, clamped)
+      }
+      return clamped
+    })
+  }, [sidebarMinWidth])
 
   // Callback for immediate match info updates from ChatDisplay
   // Memo guard prevents render feedback loops from identical updates
@@ -1224,7 +1247,7 @@ function AppShellContent({
 
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizing === 'sidebar') {
-        const newWidth = Math.min(Math.max(e.clientX, 180), 320)
+        const newWidth = Math.min(Math.max(e.clientX, sidebarMinWidth), SIDEBAR_MAX_WIDTH)
         setSidebarWidth(newWidth)
         if (resizeHandleRef.current) {
           const rect = resizeHandleRef.current.getBoundingClientRect()
@@ -1264,6 +1287,7 @@ function AppShellContent({
     sidebarWidth,
     sessionListWidth,
     isSidebarVisible,
+    sidebarMinWidth,
   ])
 
   // Spring transition config - shared between sidebar and header
