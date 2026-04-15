@@ -14,10 +14,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { useTheme } from '@/context/ThemeContext'
+import {
+  BASE_FONT_SIZE_STEP,
+  MAX_BASE_FONT_SIZE,
+  MIN_BASE_FONT_SIZE,
+} from '@/context/base-font-size'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { routes } from '@/lib/navigate'
 import { Input } from '@/components/ui/input'
-import { Monitor, Sun, Moon } from 'lucide-react'
+import { Monitor, Sun, Moon, Minus, Plus } from 'lucide-react'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { BodyFontPreset, MonoFontPreset, ToolIconMapping } from '../../../shared/types'
 
@@ -34,6 +39,7 @@ import { useWorkspaceIcons } from '@/hooks/useWorkspaceIcon'
 import { Info_DataTable, SortableHeader } from '@/components/info/Info_DataTable'
 import { Info_Badge } from '@/components/info/Info_Badge'
 import type { PresetTheme } from '@config/theme'
+import { parseBaseFontSizeInput } from './base-font-size-utils'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -114,6 +120,8 @@ export default function AppearanceSettingsPage() {
     setMonoFontCustom,
     baseFontSize,
     setBaseFontSize,
+    chatFontSize,
+    setChatFontSize,
     activeWorkspaceId,
     setWorkspaceColorTheme,
     themeLoadError,
@@ -123,6 +131,8 @@ export default function AppearanceSettingsPage() {
 
   const [baseFontSizeInput, setBaseFontSizeInput] = useState(String(baseFontSize))
   const [baseFontSizeError, setBaseFontSizeError] = useState<string | null>(null)
+  const [chatFontSizeInput, setChatFontSizeInput] = useState(String(chatFontSize))
+  const [chatFontSizeError, setChatFontSizeError] = useState<string | null>(null)
   const [bodyFontCustomDraft, setBodyFontCustomDraft] = useState(bodyFontCustom)
   const [monoFontCustomDraft, setMonoFontCustomDraft] = useState(monoFontCustom)
 
@@ -130,6 +140,11 @@ export default function AppearanceSettingsPage() {
     setBaseFontSizeInput(String(baseFontSize))
     setBaseFontSizeError(null)
   }, [baseFontSize])
+
+  useEffect(() => {
+    setChatFontSizeInput(String(chatFontSize))
+    setChatFontSizeError(null)
+  }, [chatFontSize])
 
   useEffect(() => {
     setBodyFontCustomDraft(bodyFontCustom)
@@ -278,14 +293,15 @@ export default function AppearanceSettingsPage() {
   ], [t])
 
   const parseAndApplyBaseFontSize = useCallback((raw: string): boolean => {
-    const trimmed = raw.trim()
-    const parsed = Number(trimmed)
-    const isInteger = Number.isInteger(parsed)
-    const isInRange = parsed >= 12 && parsed <= 20
+    const parsed = parseBaseFontSizeInput(raw)
 
-    if (!trimmed || !isInteger || !isInRange) {
+    if (parsed === null) {
       setBaseFontSizeError(
-        t("settings.appearance.baseFontSizeError", { min: 12, max: 20 })
+        t("settings.appearance.baseFontSizeError", {
+          min: MIN_BASE_FONT_SIZE,
+          max: MAX_BASE_FONT_SIZE,
+          step: BASE_FONT_SIZE_STEP,
+        })
       )
       return false
     }
@@ -294,6 +310,55 @@ export default function AppearanceSettingsPage() {
     setBaseFontSize(parsed)
     return true
   }, [setBaseFontSize, t])
+
+  const parseAndApplyChatFontSize = useCallback((raw: string): boolean => {
+    const parsed = parseBaseFontSizeInput(raw)
+
+    if (parsed === null) {
+      setChatFontSizeError(
+        t("settings.appearance.chatFontSizeError", {
+          min: MIN_BASE_FONT_SIZE,
+          max: MAX_BASE_FONT_SIZE,
+          step: BASE_FONT_SIZE_STEP,
+        })
+      )
+      return false
+    }
+
+    setChatFontSizeError(null)
+    setChatFontSize(parsed)
+    return true
+  }, [setChatFontSize, t])
+
+  const adjustBaseFontSize = useCallback((direction: 'decrease' | 'increase') => {
+    const delta = direction === 'increase' ? BASE_FONT_SIZE_STEP : -BASE_FONT_SIZE_STEP
+    const nextRaw = baseFontSize + delta
+    const next = Math.min(
+      MAX_BASE_FONT_SIZE,
+      Math.max(MIN_BASE_FONT_SIZE, Number(nextRaw.toFixed(2)))
+    )
+
+    if (next === baseFontSize) return
+
+    setBaseFontSize(next)
+    setBaseFontSizeInput(String(next))
+    setBaseFontSizeError(null)
+  }, [baseFontSize, setBaseFontSize])
+
+  const adjustChatFontSize = useCallback((direction: 'decrease' | 'increase') => {
+    const delta = direction === 'increase' ? BASE_FONT_SIZE_STEP : -BASE_FONT_SIZE_STEP
+    const nextRaw = chatFontSize + delta
+    const next = Math.min(
+      MAX_BASE_FONT_SIZE,
+      Math.max(MIN_BASE_FONT_SIZE, Number(nextRaw.toFixed(2)))
+    )
+
+    if (next === chatFontSize) return
+
+    setChatFontSize(next)
+    setChatFontSizeInput(String(next))
+    setChatFontSizeError(null)
+  }, [chatFontSize, setChatFontSize])
 
   return (
     <div className="h-full flex flex-col">
@@ -376,27 +441,99 @@ export default function AppearanceSettingsPage() {
                     </SettingsRow>
                   )}
                   <SettingsRow
+                    label={t("settings.appearance.chatFontSize")}
+                    description={chatFontSizeError ?? undefined}
+                  >
+                    <div className="w-[150px] rounded-md shadow-minimal has-[:focus-visible]:bg-background overflow-hidden bg-muted/50">
+                      <div className="flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => adjustChatFontSize('decrease')}
+                          disabled={chatFontSize <= MIN_BASE_FONT_SIZE}
+                          aria-label="Decrease chat font size"
+                          className="h-9 w-9 shrink-0 inline-flex items-center justify-center border-r border-foreground/10 text-muted-foreground hover:bg-foreground/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <Input
+                          type="number"
+                          value={chatFontSizeInput}
+                          min={MIN_BASE_FONT_SIZE}
+                          max={MAX_BASE_FONT_SIZE}
+                          step={BASE_FONT_SIZE_STEP}
+                          inputMode="decimal"
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setChatFontSizeInput(value)
+                            parseAndApplyChatFontSize(value)
+                          }}
+                          onBlur={() => {
+                            if (!parseAndApplyChatFontSize(chatFontSizeInput)) {
+                              setChatFontSizeInput(String(chatFontSize))
+                              setChatFontSizeError(null)
+                            }
+                          }}
+                          placeholder={t("settings.appearance.chatFontSizePlaceholder")}
+                          className="text-center tabular-nums bg-transparent border-0 rounded-none shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => adjustChatFontSize('increase')}
+                          disabled={chatFontSize >= MAX_BASE_FONT_SIZE}
+                          aria-label="Increase chat font size"
+                          className="h-9 w-9 shrink-0 inline-flex items-center justify-center border-l border-foreground/10 text-muted-foreground hover:bg-foreground/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </SettingsRow>
+                  <SettingsRow
                     label={t("settings.appearance.baseFontSize")}
                     description={baseFontSizeError ?? undefined}
                   >
-                    <div className="w-[120px] rounded-md shadow-minimal has-[:focus-visible]:bg-background">
-                      <Input
-                        value={baseFontSizeInput}
-                        inputMode="numeric"
-                        onChange={(e) => {
-                          const value = e.target.value
-                          setBaseFontSizeInput(value)
-                          parseAndApplyBaseFontSize(value)
-                        }}
-                        onBlur={() => {
-                          if (!parseAndApplyBaseFontSize(baseFontSizeInput)) {
-                            setBaseFontSizeInput(String(baseFontSize))
-                            setBaseFontSizeError(null)
-                          }
-                        }}
-                        placeholder={t("settings.appearance.baseFontSizePlaceholder")}
-                        className="bg-muted/50 border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent"
-                      />
+                    <div className="w-[150px] rounded-md shadow-minimal has-[:focus-visible]:bg-background overflow-hidden bg-muted/50">
+                      <div className="flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => adjustBaseFontSize('decrease')}
+                          disabled={baseFontSize <= MIN_BASE_FONT_SIZE}
+                          aria-label="Decrease font size"
+                          className="h-9 w-9 shrink-0 inline-flex items-center justify-center border-r border-foreground/10 text-muted-foreground hover:bg-foreground/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <Input
+                          type="number"
+                          value={baseFontSizeInput}
+                          min={MIN_BASE_FONT_SIZE}
+                          max={MAX_BASE_FONT_SIZE}
+                          step={BASE_FONT_SIZE_STEP}
+                          inputMode="decimal"
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setBaseFontSizeInput(value)
+                            parseAndApplyBaseFontSize(value)
+                          }}
+                          onBlur={() => {
+                            if (!parseAndApplyBaseFontSize(baseFontSizeInput)) {
+                              setBaseFontSizeInput(String(baseFontSize))
+                              setBaseFontSizeError(null)
+                            }
+                          }}
+                          placeholder={t("settings.appearance.baseFontSizePlaceholder")}
+                          className="text-center tabular-nums bg-transparent border-0 rounded-none shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => adjustBaseFontSize('increase')}
+                          disabled={baseFontSize >= MAX_BASE_FONT_SIZE}
+                          aria-label="Increase font size"
+                          className="h-9 w-9 shrink-0 inline-flex items-center justify-center border-l border-foreground/10 text-muted-foreground hover:bg-foreground/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </SettingsRow>
                   <SettingsRow label={t("settings.appearance.language")}>

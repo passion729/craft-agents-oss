@@ -10,14 +10,13 @@ import {
   type ThemeFile,
   type ShikiThemeConfig,
 } from '@config/theme'
+import { normalizeBaseFontSize } from './base-font-size'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type LegacyFontFamily = 'inter' | 'system'
 export type BodyFontPreset = 'system' | 'inter' | 'custom'
 export type MonoFontPreset = 'jetbrains' | 'system' | 'custom'
 
-const MIN_BASE_FONT_SIZE = 12
-const MAX_BASE_FONT_SIZE = 20
 const DEFAULT_BASE_FONT_SIZE = 15
 
 const DEFAULT_BODY_FONT_PRESET: BodyFontPreset = 'system'
@@ -36,6 +35,7 @@ interface ThemePreferencesPayload {
   monoFontPreset: MonoFontPreset
   monoFontCustom: string
   baseFontSize: number
+  chatFontSize: number
 }
 
 interface ThemeContextType {
@@ -48,6 +48,7 @@ interface ThemeContextType {
   monoFontPreset: MonoFontPreset
   monoFontCustom: string
   baseFontSize: number
+  chatFontSize: number
   setMode: (mode: ThemeMode) => void
   /** Set app-level default color theme */
   setColorTheme: (theme: string) => void
@@ -56,6 +57,7 @@ interface ThemeContextType {
   setMonoFontPreset: (preset: MonoFontPreset) => void
   setMonoFontCustom: (fontFamily: string) => void
   setBaseFontSize: (size: number) => void
+  setChatFontSize: (size: number) => void
 
   // Workspace-level theme override
   /** Active workspace ID (null if no workspace context) */
@@ -104,6 +106,10 @@ interface StoredTheme {
   monoFontPreset?: MonoFontPreset
   monoFontCustom?: string
   baseFontSize?: number
+  chatFontSize?: number
+  /** Legacy fields kept for backward compatibility with pre-release builds. */
+  chatFontPreset?: unknown
+  chatFontCustom?: unknown
   /** Legacy field kept for backwards-compatible migration only. */
   font?: LegacyFontFamily
   /** True when user explicitly changed theme in UI (not auto-saved on startup) */
@@ -136,6 +142,7 @@ interface ThemeProviderProps {
   defaultBodyFontPreset?: BodyFontPreset
   defaultMonoFontPreset?: MonoFontPreset
   defaultBaseFontSize?: number
+  defaultChatFontSize?: number
   /** Active workspace ID for workspace-level theme overrides */
   activeWorkspaceId?: string | null
 }
@@ -162,13 +169,6 @@ function normalizeMonoFontPreset(value: unknown, fallback: MonoFontPreset): Mono
   return fallback
 }
 
-function normalizeBaseFontSize(value: unknown, fallback: number): number {
-  const parsed = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(parsed)) return fallback
-  const rounded = Math.round(parsed)
-  return Math.min(MAX_BASE_FONT_SIZE, Math.max(MIN_BASE_FONT_SIZE, rounded))
-}
-
 function loadStoredTheme(): StoredTheme | null {
   if (typeof window === 'undefined') return null
   return storage.get<StoredTheme | null>(storage.KEYS.theme, null)
@@ -185,7 +185,8 @@ function isLegacyFontOnlyTheme(stored: StoredTheme | null): boolean {
     stored.bodyFontCustom === undefined &&
     stored.monoFontPreset === undefined &&
     stored.monoFontCustom === undefined &&
-    stored.baseFontSize === undefined
+    stored.baseFontSize === undefined &&
+    stored.chatFontSize === undefined
   )
 }
 
@@ -197,9 +198,11 @@ function normalizeStoredTheme(
     bodyFontPreset: BodyFontPreset
     monoFontPreset: MonoFontPreset
     baseFontSize: number
+    chatFontSize: number
   }
 ): NormalizedThemePreferences {
   const legacyBodyPreset: BodyFontPreset = stored?.font === 'inter' ? 'inter' : defaults.bodyFontPreset
+  const normalizedBaseFontSize = normalizeBaseFontSize(stored?.baseFontSize, defaults.baseFontSize)
 
   return {
     mode: normalizeThemeMode(stored?.mode, defaults.mode),
@@ -210,7 +213,8 @@ function normalizeStoredTheme(
     bodyFontCustom: typeof stored?.bodyFontCustom === 'string' ? stored.bodyFontCustom : '',
     monoFontPreset: normalizeMonoFontPreset(stored?.monoFontPreset, defaults.monoFontPreset),
     monoFontCustom: typeof stored?.monoFontCustom === 'string' ? stored.monoFontCustom : '',
-    baseFontSize: normalizeBaseFontSize(stored?.baseFontSize, defaults.baseFontSize),
+    baseFontSize: normalizedBaseFontSize,
+    chatFontSize: normalizeBaseFontSize(stored?.chatFontSize, normalizedBaseFontSize),
     isUserOverride: stored?.isUserOverride,
   }
 }
@@ -224,6 +228,7 @@ function toStoredTheme(preferences: ThemePreferencesPayload, isUserOverride?: bo
     monoFontPreset: preferences.monoFontPreset,
     monoFontCustom: preferences.monoFontCustom,
     baseFontSize: preferences.baseFontSize,
+    chatFontSize: preferences.chatFontSize,
     isUserOverride,
   }
 }
@@ -235,6 +240,7 @@ export function ThemeProvider({
   defaultBodyFontPreset = DEFAULT_BODY_FONT_PRESET,
   defaultMonoFontPreset = DEFAULT_MONO_FONT_PRESET,
   defaultBaseFontSize = DEFAULT_BASE_FONT_SIZE,
+  defaultChatFontSize = DEFAULT_BASE_FONT_SIZE,
   activeWorkspaceId = null
 }: ThemeProviderProps) {
   const initialStoredTheme = loadStoredTheme()
@@ -244,6 +250,7 @@ export function ThemeProvider({
     bodyFontPreset: defaultBodyFontPreset,
     monoFontPreset: defaultMonoFontPreset,
     baseFontSize: defaultBaseFontSize,
+    chatFontSize: defaultChatFontSize,
   })
 
   // === Preference state (persisted at app level) ===
@@ -260,6 +267,7 @@ export function ThemeProvider({
   const [monoFontPreset, setMonoFontPresetState] = useState<MonoFontPreset>(initialPreferences.monoFontPreset)
   const [monoFontCustom, setMonoFontCustomState] = useState<string>(initialPreferences.monoFontCustom)
   const [baseFontSize, setBaseFontSizeState] = useState<number>(initialPreferences.baseFontSize)
+  const [chatFontSize, setChatFontSizeState] = useState<number>(initialPreferences.chatFontSize)
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemPreference)
   const [previewColorTheme, setPreviewColorTheme] = useState<string | null>(null)
 
@@ -278,9 +286,10 @@ export function ThemeProvider({
       monoFontPreset,
       monoFontCustom,
       baseFontSize,
+      chatFontSize,
       ...overrides,
     }),
-    [mode, colorTheme, bodyFontPreset, bodyFontCustom, monoFontPreset, monoFontCustom, baseFontSize]
+    [mode, colorTheme, bodyFontPreset, bodyFontCustom, monoFontPreset, monoFontCustom, baseFontSize, chatFontSize]
   )
 
   const persistAndBroadcast = useCallback(
@@ -472,7 +481,7 @@ export function ThemeProvider({
   useEffect(() => {
     const root = document.documentElement
 
-    // Preserve Inter-specific optical settings only when Inter preset is selected.
+    // Preserve Inter-specific optical settings when UI font uses Inter.
     if (bodyFontPreset === 'inter') {
       root.dataset.font = 'inter'
     } else {
@@ -483,6 +492,7 @@ export function ThemeProvider({
     root.style.setProperty('--font-default', 'var(--font-sans)')
     root.style.setProperty('--font-mono', resolvedMonoFont)
     root.style.setProperty('--font-size-base', `${baseFontSize}px`)
+    root.style.setProperty('--font-size-chat', `${chatFontSize}px`)
 
     // Apply color theme data attribute
     if (effectiveColorTheme && effectiveColorTheme !== 'default') {
@@ -493,7 +503,7 @@ export function ThemeProvider({
 
     // Always set theme override for semi-transparent background (vibrancy effect)
     root.dataset.themeOverride = 'true'
-  }, [effectiveColorTheme, bodyFontPreset, resolvedBodyFont, resolvedMonoFont, baseFontSize])
+  }, [effectiveColorTheme, bodyFontPreset, resolvedBodyFont, resolvedMonoFont, baseFontSize, chatFontSize])
 
   // Apply dark/light class and theme-specific DOM attributes
   // This runs when preset loads or mode changes
@@ -606,13 +616,15 @@ export function ThemeProvider({
     const cleanup = window.electronAPI.onThemePreferencesChange((preferences) => {
       isExternalUpdate.current = true
 
+      const normalizedBaseFontSize = normalizeBaseFontSize(preferences.baseFontSize, DEFAULT_BASE_FONT_SIZE)
       setModeState(normalizeThemeMode(preferences.mode, defaultMode))
       setColorThemeState(preferences.colorTheme)
       setBodyFontPresetState(normalizeBodyFontPreset(preferences.bodyFontPreset, DEFAULT_BODY_FONT_PRESET))
       setBodyFontCustomState(typeof preferences.bodyFontCustom === 'string' ? preferences.bodyFontCustom : '')
       setMonoFontPresetState(normalizeMonoFontPreset(preferences.monoFontPreset, DEFAULT_MONO_FONT_PRESET))
       setMonoFontCustomState(typeof preferences.monoFontCustom === 'string' ? preferences.monoFontCustom : '')
-      setBaseFontSizeState(normalizeBaseFontSize(preferences.baseFontSize, DEFAULT_BASE_FONT_SIZE))
+      setBaseFontSizeState(normalizedBaseFontSize)
+      setChatFontSizeState(normalizeBaseFontSize(preferences.chatFontSize, normalizedBaseFontSize))
 
       // When syncing from another window, mark as user override since user explicitly changed theme
       const normalizedPreferences = {
@@ -622,7 +634,8 @@ export function ThemeProvider({
         bodyFontCustom: typeof preferences.bodyFontCustom === 'string' ? preferences.bodyFontCustom : '',
         monoFontPreset: normalizeMonoFontPreset(preferences.monoFontPreset, DEFAULT_MONO_FONT_PRESET),
         monoFontCustom: typeof preferences.monoFontCustom === 'string' ? preferences.monoFontCustom : '',
-        baseFontSize: normalizeBaseFontSize(preferences.baseFontSize, DEFAULT_BASE_FONT_SIZE),
+        baseFontSize: normalizedBaseFontSize,
+        chatFontSize: normalizeBaseFontSize(preferences.chatFontSize, normalizedBaseFontSize),
       } as ThemePreferencesPayload
       saveTheme(toStoredTheme(normalizedPreferences, true))
 
@@ -679,6 +692,13 @@ export function ThemeProvider({
     persistAndBroadcast(next)
   }, [baseFontSize, toThemePreferences, persistAndBroadcast])
 
+  const setChatFontSize = useCallback((size: number) => {
+    const normalized = normalizeBaseFontSize(size, chatFontSize)
+    setChatFontSizeState(normalized)
+    const next = toThemePreferences({ chatFontSize: normalized })
+    persistAndBroadcast(next)
+  }, [chatFontSize, toThemePreferences, persistAndBroadcast])
+
   // Set workspace-specific color theme override
   const setWorkspaceColorTheme = useCallback((newTheme: string | null) => {
     if (!activeWorkspaceId) return
@@ -713,6 +733,7 @@ export function ThemeProvider({
         monoFontPreset,
         monoFontCustom,
         baseFontSize,
+        chatFontSize,
         setMode,
         setColorTheme,
         setBodyFontPreset,
@@ -720,6 +741,7 @@ export function ThemeProvider({
         setMonoFontPreset,
         setMonoFontCustom,
         setBaseFontSize,
+        setChatFontSize,
 
         // Workspace-level theme override
         activeWorkspaceId,

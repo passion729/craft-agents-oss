@@ -2313,7 +2313,7 @@ function MessageBubble({
   if (message.role === 'assistant') {
     return (
       <div className="flex justify-start group">
-        <div className="relative max-w-[90%] bg-background shadow-minimal rounded-[8px] pl-6 pr-4 py-3 break-words min-w-0 select-text">
+        <div className="chat-message-body relative max-w-[90%] bg-background shadow-minimal rounded-[8px] pl-6 pr-4 py-3 break-words min-w-0 select-text">
           {/* Pop-out button - visible on hover */}
           {onPopOut && !message.isStreaming && (
             <button
@@ -2340,7 +2340,6 @@ function MessageBubble({
                 onUrlClick={onOpenUrl}
                 onFileClick={onOpenFile}
                 id={message.id}
-                className="text-sm"
                 collapsible
               >
                 {message.content}

@@ -312,6 +312,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     monoFontPreset: 'jetbrains' | 'system' | 'custom'
     monoFontCustom: string
     baseFontSize: number
+    chatFontSize: number
   }) => {
     pushTyped(server, RPC_CHANNELS.theme.PREFERENCES_CHANGED, { to: 'all' }, preferences)
   })

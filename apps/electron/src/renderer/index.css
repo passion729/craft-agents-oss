@@ -188,6 +188,7 @@
 
   /* Layout */
   --font-size-base: 15px;
+  --font-size-chat: var(--font-size-base);
   --radius: 0rem;
   --spacing: 0.25rem;
   --tracking-normal: 0em;
@@ -489,6 +490,14 @@ html[data-font="inter"] {
     color: var(--foreground);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  .chat-message-body {
+    font-size: var(--font-size-chat, var(--font-size-base));
+  }
+
+  .chat-message-body .markdown-content.text-sm {
+    font-size: var(--font-size-chat, var(--font-size-base));
   }
 
   /* Scrollbar styling */

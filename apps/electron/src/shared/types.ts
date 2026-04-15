@@ -112,6 +112,7 @@ export interface ThemePreferencesPayload {
   monoFontPreset: MonoFontPreset
   monoFontCustom: string
   baseFontSize: number
+  chatFontSize: number
 }
 
 /**

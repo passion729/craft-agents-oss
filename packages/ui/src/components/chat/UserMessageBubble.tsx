@@ -229,7 +229,7 @@ function renderContentWithBadges(
         mode="minimal"
         onUrlClick={onUrlClick}
         onFileClick={onFileClick}
-        className="text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap"
+        className="[&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap"
       >
         {content}
       </Markdown>
@@ -253,7 +253,7 @@ function renderContentWithBadges(
             mode="minimal"
             onUrlClick={onUrlClick}
             onFileClick={onFileClick}
-            className="inline text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap [&_p]:inline"
+            className="inline [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap [&_p]:inline"
           >
             {textBefore}
           </Markdown>
@@ -289,7 +289,7 @@ function renderContentWithBadges(
           mode="minimal"
           onUrlClick={onUrlClick}
           onFileClick={onFileClick}
-          className="inline text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap [&_p]:inline"
+          className="inline [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap [&_p]:inline"
         >
           {textAfter}
         </Markdown>
@@ -298,7 +298,7 @@ function renderContentWithBadges(
   }
 
   // Use <p> to match Markdown's block-level line-height behavior
-  return <p className="text-sm">{elements}</p>
+  return <p>{elements}</p>
 }
 
 export interface UserMessageBubbleProps {
@@ -427,7 +427,7 @@ export function UserMessageBubble({
       {/* Text content bubble */}
       <div
         className={cn(
-          "max-w-[80%] bg-user-message-bubble rounded-[16px] break-words min-w-0 select-text [&_p]:m-0",
+          "chat-message-body max-w-[80%] bg-user-message-bubble rounded-[16px] break-words min-w-0 select-text [&_p]:m-0",
           compactMode ? "px-4 py-2" : "px-5 py-3.5",
           isPending && "animate-shimmer"
         )}
@@ -439,7 +439,7 @@ export function UserMessageBubble({
               mode="minimal"
               onUrlClick={onUrlClick}
               onFileClick={onFileClick}
-              className="text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap"
+              className="[&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap"
             >
               {displayContent}
             </Markdown>

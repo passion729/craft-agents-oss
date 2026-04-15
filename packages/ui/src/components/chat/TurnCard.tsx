@@ -891,6 +891,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
               <Markdown
                 mode="minimal"
                 className={cn(
+                  "chat-message-body",
                   "[&_p]:my-0 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:my-1 [&_blockquote]:my-1 [&_h1]:my-1 [&_h2]:my-1 [&_h3]:my-1",
                   onOpenDetails && isComplete && "group-hover/row:underline"
                 )}
@@ -2447,7 +2448,7 @@ export function ResponseCard({
               }),
             }}
           >
-            <div ref={contentLayerRef} className="relative">
+            <div ref={contentLayerRef} className="relative chat-message-body">
               <Markdown
                 mode="minimal"
                 onUrlClick={onOpenUrl}
@@ -2572,7 +2573,7 @@ export function ResponseCard({
             }),
           }}
         >
-          <div ref={contentLayerRef} className="relative">
+          <div ref={contentLayerRef} className="relative chat-message-body">
             <Markdown
               mode="minimal"
               onUrlClick={onOpenUrl}

@@ -41,6 +41,7 @@ export interface BroadcastEventMap {
     monoFontPreset: 'jetbrains' | 'system' | 'custom'
     monoFontCustom: string
     baseFontSize: number
+    chatFontSize: number
   }]
   [RPC_CHANNELS.theme.WORKSPACE_THEME_CHANGED]: [data: { workspaceId: string; themeId: string | null }]
 
