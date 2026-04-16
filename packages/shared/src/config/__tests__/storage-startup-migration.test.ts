@@ -248,4 +248,29 @@ describe('startup migration (integration)', () => {
     expect(modelIds).toEqual(['pi/x-ai/grok-4', 'pi/openrouter/auto'])
     expect(connection.defaultModel).toBe('pi/x-ai/grok-4')
   })
+
+  it('backfills missing customEndpoint metadata for pi_compat connections', () => {
+    const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
+
+    writeRootConfig(configPath, workspaceRoot, [
+      {
+        slug: 'pi-api-key',
+        name: 'Custom OpenAI-Compatible',
+        providerType: 'pi_compat',
+        authType: 'api_key_with_endpoint',
+        piAuthProvider: 'openai',
+        baseUrl: 'https://custom-openai-compatible.example.com/v1',
+        createdAt: Date.now(),
+        models: ['pi/gpt-5.4'],
+        defaultModel: 'pi/gpt-5.4',
+      },
+    ])
+
+    runMigration(configDir)
+
+    const connection = readPiApiKeyConnection(configPath)
+    expect(connection).toBeDefined()
+    expect(connection.providerType).toBe('pi_compat')
+    expect(connection.customEndpoint).toEqual({ api: 'openai-completions' })
+  })
 })

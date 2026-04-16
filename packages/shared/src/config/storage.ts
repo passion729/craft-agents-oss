@@ -42,7 +42,7 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
 import type { LlmConnection } from './llm-connections.ts';
-import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
+import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, toBedrockNativeId, type CustomEndpointApi, type LlmProviderType } from './llm-connections.ts';
 import {
   getModelProvider,
 } from './models.ts';
@@ -1819,6 +1819,22 @@ function migrateWorkspaceOpus45ToOpus46(config: StoredConfig): void {
   }
 }
 
+function inferCompatEndpointApi(connection: Pick<LlmConnection, 'piAuthProvider' | 'defaultModel' | 'models'>): CustomEndpointApi {
+  if (connection.piAuthProvider === 'anthropic') return 'anthropic-messages';
+  if (connection.piAuthProvider === 'openai') return 'openai-completions';
+
+  const toBareModelId = (id: string): string => id.startsWith('pi/') ? id.slice(3) : id;
+  const ids = [
+    connection.defaultModel,
+    ...(connection.models ?? []).map(m => typeof m === 'string' ? m : m.id),
+  ].filter((id): id is string => typeof id === 'string' && id.length > 0)
+    .map(toBareModelId);
+
+  return ids.some(id => id.toLowerCase().includes('claude'))
+    ? 'anthropic-messages'
+    : 'openai-completions';
+}
+
 /**
  * Migrate legacy provider types to the active set (anthropic, pi, pi_compat).
  *
@@ -1876,6 +1892,14 @@ function migrateLegacyProviderTypes(config: StoredConfig): boolean {
       (connection as { providerType: LlmProviderType }).providerType = 'pi_compat';
       connection.customEndpoint = { api: 'anthropic-messages' };
       // authType 'api_key_with_endpoint' stays; baseUrl and models are preserved
+      changed = true;
+      continue;
+    }
+
+    // Forward: older pi_compat records may be missing protocol metadata.
+    // Infer a deterministic protocol so runtime model routing is stable.
+    if (connection.providerType === 'pi_compat' && connection.baseUrl?.trim() && !connection.customEndpoint) {
+      connection.customEndpoint = { api: inferCompatEndpointApi(connection) };
       changed = true;
       continue;
     }

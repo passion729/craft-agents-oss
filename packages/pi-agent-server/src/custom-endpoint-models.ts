@@ -13,8 +13,8 @@ export interface CustomEndpointModelOverrides {
 /**
  * Build a synthetic model definition for a custom endpoint.
  * Uses reasonable defaults for context window and max tokens since we can't
- * query the endpoint for its actual capabilities. Image support must be
- * explicitly enabled either at the connection level or per-model.
+ * query the endpoint for its actual capabilities. Image support is enabled
+ * by default and can be disabled per-endpoint or per-model.
  */
 export function buildCustomEndpointModelDef(
   id: string,
@@ -22,7 +22,7 @@ export function buildCustomEndpointModelDef(
   overrides?: CustomEndpointModelOverrides,
   api?: CustomEndpointApi,
 ) {
-  const supportsImages = overrides?.supportsImages ?? defaults?.supportsImages ?? false
+  const supportsImages = overrides?.supportsImages ?? defaults?.supportsImages ?? true
   const input: CustomEndpointInput[] = supportsImages ? ['text', 'image'] : ['text']
   const compat = api === 'openai-completions'
     ? {

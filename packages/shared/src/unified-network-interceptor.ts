@@ -158,6 +158,83 @@ export function injectMetadataIntoToolSchema<T extends {
 }
 
 /**
+ * OpenAI Responses requires input[*].content to be either a string or an array.
+ * Some SDK/provider bridges can emit null for message-like history items, which
+ * causes hard 400s such as:
+ *   Invalid type for 'input[2].content': expected ... array or string, got null
+ *
+ * We normalize null content to an empty string so requests stay valid.
+ *
+ * Exported for focused unit tests.
+ */
+export function sanitizeOpenAiResponsesNullContent(body: Record<string, unknown>): number {
+  const input = body.input as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(input)) return 0;
+
+  let normalized = 0;
+  for (const entry of input) {
+    if (!Object.hasOwn(entry, 'content') || entry.content !== null) continue;
+    entry.content = '';
+    normalized++;
+  }
+
+  if (normalized > 0) {
+    debugLog(`[OpenAI Responses] Normalized null content in ${normalized} input item(s)`);
+  }
+  return normalized;
+}
+
+/**
+ * Normalize OpenAI Chat Completions message content for compatibility gateways.
+ *
+ * Some OpenAI-compatible proxies internally convert chat payloads to Responses
+ * format and mishandle:
+ * - `messages[*].content = null`
+ * - text-only content arrays (`[{type:"text", text:"..."}]`)
+ *
+ * We normalize these without touching multimodal arrays that include images.
+ *
+ * Exported for focused unit tests.
+ */
+export function sanitizeOpenAiChatMessagesForCompat(body: Record<string, unknown>): number {
+  const messages = body.messages as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(messages)) return 0;
+
+  let normalized = 0;
+
+  for (const message of messages) {
+    if (!Object.hasOwn(message, 'content')) continue;
+
+    if (message.content === null) {
+      message.content = '';
+      normalized++;
+      continue;
+    }
+
+    if (!Array.isArray(message.content)) continue;
+
+    const content = message.content as Array<Record<string, unknown>>;
+    if (content.length === 0) continue;
+
+    const isTextOnlyArray = content.every(item =>
+      item &&
+      typeof item === 'object' &&
+      item.type === 'text' &&
+      typeof item.text === 'string',
+    );
+    if (!isTextOnlyArray) continue;
+
+    message.content = content.map(item => item.text as string).join('');
+    normalized++;
+  }
+
+  if (normalized > 0) {
+    debugLog(`[OpenAI Chat] Normalized content shape in ${normalized} message(s)`);
+  }
+  return normalized;
+}
+
+/**
  * Extract _intent/_displayName from a parsed tool input and store in toolMetadataStore.
  * Shared by both SSE processors (Anthropic strips, OpenAI captures).
  *
@@ -1012,6 +1089,8 @@ const openAiAdapter: ApiAdapter = {
   },
 
   injectMetadataIntoHistory(body: Record<string, unknown>): Record<string, unknown> {
+    sanitizeOpenAiChatMessagesForCompat(body);
+
     const messages = body.messages as Array<{
       role?: string;
       tool_calls?: Array<{
@@ -1230,6 +1309,8 @@ const openAiResponsesAdapter: ApiAdapter = {
   },
 
   injectMetadataIntoHistory(body: Record<string, unknown>): Record<string, unknown> {
+    sanitizeOpenAiResponsesNullContent(body);
+
     const input = body.input as Array<Record<string, unknown>> | undefined;
     if (!Array.isArray(input)) return body;
 

@@ -2,14 +2,14 @@ import { describe, expect, it } from 'bun:test'
 import { buildCustomEndpointModelDef } from './custom-endpoint-models.ts'
 
 describe('buildCustomEndpointModelDef', () => {
-  it('defaults custom endpoint models to text-only input', () => {
+  it('defaults custom endpoint models to image-capable input', () => {
     const model = buildCustomEndpointModelDef('my-model')
-    expect(model.input).toEqual(['text'])
+    expect(model.input).toEqual(['text', 'image'])
   })
 
-  it('enables image input when the connection explicitly opts in', () => {
-    const model = buildCustomEndpointModelDef('vision-model', { supportsImages: true })
-    expect(model.input).toEqual(['text', 'image'])
+  it('lets connection-level defaults disable image input', () => {
+    const model = buildCustomEndpointModelDef('text-only-model', { supportsImages: false })
+    expect(model.input).toEqual(['text'])
   })
 
   it('lets per-model overrides disable image input even when the connection default is enabled', () => {

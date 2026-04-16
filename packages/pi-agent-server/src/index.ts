@@ -423,7 +423,7 @@ function registerCustomEndpointModels(
     ...(userAgent ? { headers: { 'User-Agent': userAgent } } : {}),
     models: allIds.map(id => buildCustomEndpointModelDef(
       id,
-      { supportsImages: initConfig?.customEndpoint?.supportsImages === true },
+      { supportsImages: initConfig?.customEndpoint?.supportsImages !== false },
       customModelOverrides.get(id),
       api,
     )),
@@ -468,7 +468,11 @@ function createAuthenticatedRegistry(): {
       : [initConfig.model || 'default']
     ).map(m => typeof m === 'string'
       ? { id: stripPiPrefix(m) }
-      : { id: stripPiPrefix(m.id), contextWindow: m.contextWindow });
+      : {
+        id: stripPiPrefix(m.id),
+        contextWindow: m.contextWindow,
+        ...(m.supportsImages !== undefined ? { supportsImages: m.supportsImages } : {}),
+      });
     customEndpointModelIds = new Set();  // Reset on fresh registry creation
     registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelEntries);
   } else if (hasCustomEndpoint && !initConfig?.customEndpoint) {

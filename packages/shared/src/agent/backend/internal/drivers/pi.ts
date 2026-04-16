@@ -1,5 +1,6 @@
 import type { ProviderDriver, DriverTestConnectionArgs } from '../driver-types.ts';
 import type { ModelDefinition } from '../../../../config/models.ts';
+import type { CustomEndpointConfig, LlmConnection } from '../../../../config/llm-connections.ts';
 import { getAllPiModels, getPiModelsForAuthProvider } from '../../../../config/models-pi.ts';
 import { getPiProviderBaseUrl } from '../../../../config/models-pi.ts';
 
@@ -227,6 +228,29 @@ async function testAnthropicCompatible(
   }
 }
 
+function inferCustomEndpoint(
+  connection: LlmConnection | null
+): CustomEndpointConfig | undefined {
+  if (!connection || connection.providerType !== 'pi_compat') return connection?.customEndpoint;
+  if (connection.customEndpoint) return connection.customEndpoint;
+  if (!connection.baseUrl?.trim()) return undefined;
+
+  // Legacy pi_compat connections may miss customEndpoint metadata.
+  // Infer protocol conservatively to keep runtime routing deterministic.
+  if (connection.piAuthProvider === 'anthropic') {
+    return { api: 'anthropic-messages' };
+  }
+  if (connection.piAuthProvider === 'openai') {
+    return { api: 'openai-completions' };
+  }
+
+  const hasClaudeModel = [connection.defaultModel, ...(connection.models ?? []).map(m => typeof m === 'string' ? m : m.id)]
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    .some(id => id.replace(/^pi\//, '').toLowerCase().includes('claude'));
+
+  return { api: hasClaudeModel ? 'anthropic-messages' : 'openai-completions' };
+}
+
 export const piDriver: ProviderDriver = {
   provider: 'pi',
   buildRuntime: ({ context, providerOptions, resolvedPaths }) => ({
@@ -237,15 +261,17 @@ export const piDriver: ProviderDriver = {
     },
     piAuthProvider: providerOptions?.piAuthProvider || context.connection?.piAuthProvider,
     baseUrl: context.connection?.baseUrl,
-    customEndpoint: context.connection?.customEndpoint,
+    customEndpoint: inferCustomEndpoint(context.connection),
     customModels: context.connection?.models?.map(m => {
       if (typeof m === 'string') return m;
-      const supportsImages = 'supportsImages' in m && m.supportsImages === true
-      if (m.contextWindow || supportsImages) {
+      const supportsImagesRaw = (m as { supportsImages?: unknown }).supportsImages
+      const supportsImages = typeof supportsImagesRaw === 'boolean' ? supportsImagesRaw : undefined
+      const hasSupportsImages = supportsImages !== undefined
+      if (m.contextWindow || hasSupportsImages) {
         return {
           id: m.id,
           ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
-          ...(supportsImages ? { supportsImages: true } : {}),
+          ...(hasSupportsImages ? { supportsImages } : {}),
         }
       }
       return m.id;

@@ -6,12 +6,20 @@ import { homedir } from 'node:os';
 let injectMetadataIntoToolSchema: typeof import('../unified-network-interceptor.ts').injectMetadataIntoToolSchema;
 let sanitizeEmptyTextCacheControl: typeof import('../unified-network-interceptor.ts').sanitizeEmptyTextCacheControl;
 let upgradePromptCacheTtl: typeof import('../unified-network-interceptor.ts').upgradePromptCacheTtl;
+let sanitizeOpenAiResponsesNullContent: typeof import('../unified-network-interceptor.ts').sanitizeOpenAiResponsesNullContent;
+let sanitizeOpenAiChatMessagesForCompat: typeof import('../unified-network-interceptor.ts').sanitizeOpenAiChatMessagesForCompat;
 let _resetConfigCacheForTesting: typeof import('../interceptor-common.ts')._resetConfigCacheForTesting;
 
 describe('unified-network-interceptor schema metadata injection', () => {
   beforeAll(async () => {
     process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
-    ({ injectMetadataIntoToolSchema, sanitizeEmptyTextCacheControl, upgradePromptCacheTtl } = await import('../unified-network-interceptor.ts'));
+    ({
+      injectMetadataIntoToolSchema,
+      sanitizeEmptyTextCacheControl,
+      upgradePromptCacheTtl,
+      sanitizeOpenAiResponsesNullContent,
+      sanitizeOpenAiChatMessagesForCompat,
+    } = await import('../unified-network-interceptor.ts'));
     ({ _resetConfigCacheForTesting } = await import('../interceptor-common.ts'));
   });
 
@@ -119,6 +127,86 @@ describe('sanitizeEmptyTextCacheControl', () => {
 
   it('returns 0 when no messages present', () => {
     expect(sanitizeEmptyTextCacheControl({})).toBe(0);
+  });
+});
+
+describe('sanitizeOpenAiResponsesNullContent', () => {
+  it('normalizes null content entries in responses input', () => {
+    const body = {
+      input: [
+        { role: 'system', content: 'sys' },
+        { role: 'user', content: null },
+        { type: 'function_call', call_id: 'c1', arguments: '{}' },
+        { role: 'assistant', content: null },
+      ],
+    };
+
+    const normalized = sanitizeOpenAiResponsesNullContent(body);
+
+    expect(normalized).toBe(2);
+    expect((body.input as Array<Record<string, unknown>>)[1]?.content).toBe('');
+    expect((body.input as Array<Record<string, unknown>>)[3]?.content).toBe('');
+  });
+
+  it('leaves non-null or missing content untouched', () => {
+    const body = {
+      input: [
+        { role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
+        { type: 'function_call', call_id: 'c2', arguments: '{}' },
+      ],
+    };
+
+    const normalized = sanitizeOpenAiResponsesNullContent(body);
+
+    expect(normalized).toBe(0);
+    expect((body.input as Array<Record<string, unknown>>)[0]?.content).toEqual([{ type: 'input_text', text: 'hello' }]);
+  });
+});
+
+describe('sanitizeOpenAiChatMessagesForCompat', () => {
+  it('normalizes null assistant content to empty string', () => {
+    const body = {
+      messages: [
+        { role: 'assistant', content: null, tool_calls: [{ id: 'c1' }] },
+      ],
+    };
+
+    const normalized = sanitizeOpenAiChatMessagesForCompat(body);
+
+    expect(normalized).toBe(1);
+    expect((body.messages as Array<Record<string, unknown>>)[0]?.content).toBe('');
+  });
+
+  it('converts text-only content arrays to plain strings', () => {
+    const body = {
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+        { role: 'user', content: [{ type: 'text', text: 'A' }, { type: 'text', text: 'B' }] },
+      ],
+    };
+
+    const normalized = sanitizeOpenAiChatMessagesForCompat(body);
+
+    expect(normalized).toBe(2);
+    expect((body.messages as Array<Record<string, unknown>>)[0]?.content).toBe('hello');
+    expect((body.messages as Array<Record<string, unknown>>)[1]?.content).toBe('AB');
+  });
+
+  it('keeps multimodal content arrays unchanged', () => {
+    const multimodal = [
+      { type: 'text', text: 'describe' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } },
+    ];
+    const body = {
+      messages: [
+        { role: 'user', content: multimodal },
+      ],
+    };
+
+    const normalized = sanitizeOpenAiChatMessagesForCompat(body);
+
+    expect(normalized).toBe(0);
+    expect((body.messages as Array<Record<string, unknown>>)[0]?.content).toEqual(multimodal);
   });
 });
 

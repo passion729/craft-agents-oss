@@ -1813,6 +1813,26 @@ export class PiAgent extends BaseAgent {
         }
       }
 
+      if (images.length > 0) {
+        const runtime = getBackendRuntime(this.config);
+        if (runtime.customEndpoint) {
+          const bareModel = this._model.startsWith('pi/') ? this._model.slice(3) : this._model;
+          const imageEnabledByEndpoint = runtime.customEndpoint.supportsImages !== false;
+          const imageEnabledByModel = (runtime.customModels ?? []).some(m =>
+            typeof m !== 'string' &&
+            (m.id === bareModel || m.id === this._model || `pi/${m.id}` === this._model) &&
+            m.supportsImages === true,
+          );
+
+          if (!imageEnabledByEndpoint && !imageEnabledByModel) {
+            yield {
+              type: 'info',
+              message: 'Custom endpoint image input is disabled for this model. Pasted images are not sent. Set customEndpoint.supportsImages=true (or model.supportsImages=true) to re-enable it.',
+            };
+          }
+        }
+      }
+
       // For Pi, context parts go into the system prompt (not the user message).
       // Unlike Claude, other LLMs behind Pi don't know to ignore inline context
       // blocks and will echo <session_state>, <sources>, etc. back in their response.
