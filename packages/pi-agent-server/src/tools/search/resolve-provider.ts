@@ -11,7 +11,7 @@
  *   2. The ResponsesApiSearchProvider handles the rest
  */
 
-import type { WebSearchProvider } from './types.ts';
+import type { WebSearchProvider } from './types.ts'; asaaa
 import { ResponsesApiSearchProvider } from './providers/openai.ts';
 import { ChatGPTBackendSearchProvider, extractChatGptAccountId } from './providers/chatgpt.ts';
 import { GoogleSearchProvider } from './providers/google.ts';
