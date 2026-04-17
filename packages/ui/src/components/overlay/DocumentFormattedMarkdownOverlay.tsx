@@ -44,6 +44,8 @@ export interface DocumentFormattedMarkdownOverlayProps {
   messageId?: string
   /** Persisted annotations for the message */
   annotations?: AnnotationV1[]
+  /** Optional global annotation index mapping for consistent follow-up numbering */
+  annotationIndexOverrides?: Map<string, number>
   /** Callback to add annotation */
   onAddAnnotation?: (messageId: string, annotation: AnnotationV1) => void
   /** Callback to remove annotation */
@@ -71,6 +73,7 @@ export function DocumentFormattedMarkdownOverlay({
   sessionId,
   messageId,
   annotations,
+  annotationIndexOverrides,
   onAddAnnotation,
   onRemoveAnnotation,
   onUpdateAnnotation,
@@ -109,6 +112,7 @@ export function DocumentFormattedMarkdownOverlay({
                   sessionId={sessionId}
                   messageId={messageId}
                   annotations={annotations}
+                  annotationIndexOverrides={annotationIndexOverrides}
                   onAddAnnotation={onAddAnnotation}
                   onRemoveAnnotation={onRemoveAnnotation}
                   onUpdateAnnotation={onUpdateAnnotation}

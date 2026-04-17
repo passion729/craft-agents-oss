@@ -1,5 +1,6 @@
 import type { AnnotationV1 } from '@craft-agent/core'
-import { annotationColorToCss } from './annotation-style-tokens'
+import { annotationColorToCss, annotationColorToRgb } from './annotation-style-tokens'
+import { getAnnotationDisplayColor } from './follow-up-state'
 
 export function clearBlockAnnotationMarkers(root: HTMLElement): void {
   const blocks = root.querySelectorAll<HTMLElement>('[data-ca-block-annotated="true"]')
@@ -26,6 +27,7 @@ export function applyBlockAnnotationMarker(root: HTMLElement, annotation: Annota
   if (!target) return
 
   target.setAttribute('data-ca-block-annotated', 'true')
-  target.style.backgroundColor = annotationColorToCss(annotation.style?.color)
-  target.style.boxShadow = 'inset 0 0 0 1px color-mix(in srgb, var(--info) 22%, transparent)'
+  const colorName = getAnnotationDisplayColor(annotation)
+  target.style.backgroundColor = annotationColorToCss(colorName)
+  target.style.boxShadow = `inset 0 0 0 1px rgba(${annotationColorToRgb(colorName)}, 0.28)`
 }

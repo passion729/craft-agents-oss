@@ -3,11 +3,12 @@ import type { AnnotationV1 } from '@craft-agent/core'
 import {
   annotationInteractionActions,
   annotationInteractionReducer,
+  type AnnotationIslandMode,
   initialAnnotationInteractionState,
   type ActiveAnnotationDetail,
   type AnchoredSelection,
-  type AnnotationIslandMode,
 } from './interaction-state-machine'
+import type { AnnotationEditorKind } from './annotation-core'
 
 export type ExternalOpenAnnotationRequest = {
   messageId: string
@@ -34,8 +35,21 @@ export function useAnnotationInteractionController() {
     dispatch(annotationInteractionActions.openFollowUpFromSelection())
   }, [])
 
-  const openFromAnnotation = React.useCallback((detail: ActiveAnnotationDetail, noteText: string, mode: AnnotationIslandMode) => {
-    dispatch(annotationInteractionActions.openFromAnnotation(detail, noteText, mode))
+  const openNoteFromSelection = React.useCallback(() => {
+    dispatch(annotationInteractionActions.openNoteFromSelection())
+  }, [])
+
+  const openFromAnnotation = React.useCallback((
+    detail: ActiveAnnotationDetail,
+    noteText: string,
+    mode: AnnotationIslandMode,
+    editorKind: AnnotationEditorKind,
+  ) => {
+    dispatch(annotationInteractionActions.openFromAnnotation(detail, noteText, mode, editorKind))
+  }, [])
+
+  const setEditorKind = React.useCallback((editorKind: AnnotationEditorKind) => {
+    dispatch(annotationInteractionActions.setEditorKind(editorKind))
   }, [])
 
   const requestEdit = React.useCallback(() => {
@@ -67,6 +81,7 @@ export function useAnnotationInteractionController() {
       messageId?: string
       annotations?: AnnotationV1[]
       getNoteText: (annotation: AnnotationV1) => string
+      getEditorKind: (annotation: AnnotationV1) => AnnotationEditorKind
       fallbackAnchor: { x: number; y: number }
     },
   ): boolean => {
@@ -84,6 +99,7 @@ export function useAnnotationInteractionController() {
     if (!annotation) return false
 
     const noteText = params.getNoteText(annotation)
+    const editorKind = params.getEditorKind(annotation)
     const detail: ActiveAnnotationDetail = {
       annotationId: request.annotationId,
       index: annotationIndex + 1,
@@ -91,7 +107,7 @@ export function useAnnotationInteractionController() {
       anchorY: request.anchorY ?? params.fallbackAnchor.y,
     }
 
-    dispatch(annotationInteractionActions.openFromAnnotation(detail, noteText, request.mode))
+    dispatch(annotationInteractionActions.openFromAnnotation(detail, noteText, request.mode, editorKind))
     return true
   }, [])
 
@@ -100,7 +116,9 @@ export function useAnnotationInteractionController() {
     setDraft,
     openFromSelection,
     openFollowUpFromSelection,
+    openNoteFromSelection,
     openFromAnnotation,
+    setEditorKind,
     requestEdit,
     cancelFollowUp,
     closeAll,

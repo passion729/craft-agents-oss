@@ -40,16 +40,22 @@ import { TurnCardActionsMenu } from './TurnCardActionsMenu'
 import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
 import { extractAnnotationSelectedText } from './follow-up-helpers'
 import {
-  formatAnnotationFollowUpTooltipText,
-  getAnnotationNoteText,
+  formatAnnotationTooltipText,
+  getAnnotationDisplayColor,
+  getAnnotationEditorKind,
+  getAnnotationEditorText,
 } from '../annotations/follow-up-state'
 import {
   ANNOTATION_PREFIX_SUFFIX_WINDOW,
   SELECTION_POINTER_MAX_AGE_MS,
   clamp,
+  buildEditedAnnotationPatch,
+  createFollowUpSelectionAnnotation,
+  createHighlightSelectionAnnotation,
+  getAnnotationDefaultColor,
+  createNoteSelectionAnnotation,
   hasExistingTextRangeAnnotation,
   createSelectionPreviewAnnotation,
-  createTextSelectionAnnotation,
   collectTextSegments,
   getCanonicalText,
   resolveNodeOffset,
@@ -327,6 +333,8 @@ export interface TurnCardProps {
   onSaveAndSendFollowUp?: (target: { messageId: string; annotationId: string; note: string; selectedText: string }) => void
   /** Whether there are active pending follow-up annotations in the session */
   hasActiveFollowUpAnnotations?: boolean
+  /** Optional global index mapping for follow-up annotations within the session */
+  annotationIndexOverrides?: Map<string, number>
   /** External request to open a specific annotation in the follow-up island */
   openAnnotationRequest?: OpenAnnotationRequest | null
   /** Annotation interaction mode (viewer uses tooltip-only to suppress the island) */
@@ -1406,6 +1414,8 @@ export interface ResponseCardProps {
   onSaveAndSendFollowUp?: (target: { messageId: string; annotationId: string; note: string; selectedText: string }) => void
   /** Whether there are active pending follow-up annotations in the session */
   hasActiveFollowUpAnnotations?: boolean
+  /** Optional global index mapping for follow-up annotations within the session */
+  annotationIndexOverrides?: Map<string, number>
   /** External request to open a specific annotation in this response */
   openAnnotationRequest?: OpenAnnotationRequest | null
   /** Annotation interaction mode (viewer uses tooltip-only to suppress the island) */
@@ -1461,7 +1471,7 @@ function clearAnnotationMarks(root: HTMLElement): void {
   annotatedInlineCodeNodes.forEach((codeNode) => {
     codeNode.removeAttribute('data-ca-annotation-inline-code')
     codeNode.style.backgroundColor = ''
-    codeNode.style.boxShadow = ''
+    codeNode.style.removeProperty('box-shadow')
   })
 
   const marks = root.querySelectorAll('span[data-ca-annotation-id]')
@@ -1535,13 +1545,13 @@ function applyTextHighlightRange(
     const inlineCodeParent = selected.parentElement?.closest<HTMLElement>('code')
     if (inlineCodeParent) {
       inlineCodeParent.setAttribute('data-ca-annotation-inline-code', 'true')
-      inlineCodeParent.style.backgroundColor = annotationColorToCss(annotation.style?.color)
-      inlineCodeParent.style.boxShadow = 'none'
+      inlineCodeParent.style.backgroundColor = annotationColorToCss(getAnnotationDisplayColor(annotation))
+      inlineCodeParent.style.removeProperty('box-shadow')
     }
 
     const mark = document.createElement('span')
     mark.setAttribute('data-ca-annotation-id', annotation.id)
-    mark.style.backgroundColor = annotationColorToCss(annotation.style?.color)
+    mark.style.backgroundColor = annotationColorToCss(getAnnotationDisplayColor(annotation))
     mark.style.borderRadius = '0'
     mark.style.padding = '0'
     mark.style.margin = '0'
@@ -1648,6 +1658,7 @@ export function ResponseCard({
   sendMessageKey = 'enter',
   onSaveAndSendFollowUp,
   hasActiveFollowUpAnnotations = false,
+  annotationIndexOverrides,
   openAnnotationRequest,
   annotationInteractionMode = 'interactive',
 }: ResponseCardProps) {
@@ -1668,6 +1679,7 @@ export function ResponseCard({
     setDraft: setFollowUpDraft,
     openFromSelection,
     openFollowUpFromSelection,
+    openNoteFromSelection,
     openFromAnnotation,
     requestEdit,
     cancelFollowUp,
@@ -1681,6 +1693,7 @@ export function ResponseCard({
   const selectionMenuView = interactionState.selectionMenuView
   const followUpDraft = interactionState.followUpDraft
   const followUpMode = interactionState.followUpMode
+  const editorKind = interactionState.editorKind
   const activeAnnotationDetail = interactionState.activeAnnotationDetail
 
   const [selectionMenuShowNonce, setSelectionMenuShowNonce] = useState(0)
@@ -1763,7 +1776,7 @@ export function ResponseCard({
   const renderedAnnotations = useMemo(() => {
     const persisted = annotations ?? []
 
-    if (!pendingSelection || selectionMenuView !== 'confirm-follow-up' || !messageId) {
+    if (!pendingSelection || selectionMenuView !== 'editor' || !messageId) {
       return persisted
     }
 
@@ -1773,9 +1786,14 @@ export function ResponseCard({
 
     return [
       ...persisted,
-      createSelectionPreviewAnnotation(messageId, pendingSelection, sessionId ?? ''),
+      createSelectionPreviewAnnotation(
+        messageId,
+        pendingSelection,
+        editorKind === 'follow-up' ? 'follow-up' : 'note',
+        sessionId ?? '',
+      ),
     ]
-  }, [annotations, pendingSelection, selectionMenuView, messageId])
+  }, [annotations, editorKind, pendingSelection, selectionMenuView, messageId, sessionId])
 
   const activeAnnotation = useMemo(() => {
     if (!activeAnnotationDetail) return null
@@ -1809,6 +1827,7 @@ export function ResponseCard({
         root,
         renderedAnnotations,
         persistedAnnotations: annotations,
+        annotationIndexOverrides,
       })
 
       for (const annotation of renderedAnnotations) {
@@ -1831,7 +1850,7 @@ export function ResponseCard({
     return () => {
       window.removeEventListener('resize', recomputeOverlay)
     }
-  }, [annotations, renderedAnnotations, text, displayedText, isStreaming])
+  }, [annotations, annotationIndexOverrides, renderedAnnotations, text, displayedText, isStreaming])
 
   useEffect(() => {
     if (!canAnnotate) {
@@ -1900,6 +1919,43 @@ export function ResponseCard({
     openFollowUpFromSelection()
   }, [pendingSelection, openFollowUpFromSelection])
 
+  const handleOpenNoteView = useCallback(() => {
+    if (!pendingSelection) return
+
+    clearDomSelection()
+    openNoteFromSelection()
+  }, [pendingSelection, openNoteFromSelection])
+
+  const handleHighlightSelection = useCallback(() => {
+    if (!pendingSelection || !canAnnotate || !onAddAnnotation || !messageId) {
+      closeSelectionMenu()
+      return
+    }
+
+    if (hasExistingTextRangeAnnotation(annotations, pendingSelection.start, pendingSelection.end)) {
+      closeSelectionMenu()
+      return
+    }
+
+    void Promise.resolve(
+      onAddAnnotation(messageId, createHighlightSelectionAnnotation(messageId, pendingSelection, sessionId ?? ''))
+    ).then(() => {
+      markSubmitSuccess()
+      clearDomSelection()
+    }).catch(() => {
+      // no-op; parent handles persistence failures
+    })
+  }, [
+    annotations,
+    canAnnotate,
+    closeSelectionMenu,
+    markSubmitSuccess,
+    messageId,
+    onAddAnnotation,
+    pendingSelection,
+    sessionId,
+  ])
+
   const handleRequestFollowUpEdit = useCallback(() => {
     requestEdit()
   }, [requestEdit])
@@ -1920,31 +1976,14 @@ export function ResponseCard({
         return null
       }
 
-      const existingOtherBodies = activeAnnotation.body.filter(body => body.type !== 'highlight' && body.type !== 'note')
-      const nextBody: AnnotationV1['body'] = [
-        { type: 'highlight' },
-        ...(normalizedNote.length > 0 ? [{ type: 'note', text: normalizedNote, format: 'plain' } as const] : []),
-        ...existingOtherBodies,
-      ]
-
-      const nextMeta = { ...(activeAnnotation.meta ?? {}) }
-      delete nextMeta.followUp
-
       try {
-        await Promise.resolve(onUpdateAnnotation(messageId, activeAnnotationDetail.annotationId, {
-          body: nextBody,
-          intent: normalizedNote.length > 0 ? 'comment' : 'highlight',
-          updatedAt: Date.now(),
-          meta: normalizedNote.length > 0
-            ? {
-                ...nextMeta,
-                followUp: {
-                  text: normalizedNote,
-                  updatedAt: Date.now(),
-                },
-              }
-            : (Object.keys(nextMeta).length > 0 ? nextMeta : undefined),
-        }))
+        await Promise.resolve(
+          onUpdateAnnotation(
+            messageId,
+            activeAnnotationDetail.annotationId,
+            buildEditedAnnotationPatch(activeAnnotation, normalizedNote, editorKind),
+          ),
+        )
       } catch {
         return null
       }
@@ -1968,7 +2007,9 @@ export function ResponseCard({
       return null
     }
 
-    const annotation = createTextSelectionAnnotation(messageId, pendingSelection, normalizedNote, sessionId ?? '')
+    const annotation = editorKind === 'follow-up'
+      ? createFollowUpSelectionAnnotation(messageId, pendingSelection, normalizedNote, sessionId ?? '')
+      : createNoteSelectionAnnotation(messageId, pendingSelection, normalizedNote, sessionId ?? '')
 
     try {
       await Promise.resolve(onAddAnnotation(messageId, annotation))
@@ -1988,6 +2029,7 @@ export function ResponseCard({
       selectedText: pendingSelection.selectedText,
     }
   }, [
+    editorKind,
     messageId,
     activeAnnotationDetail,
     activeAnnotation,
@@ -2027,13 +2069,14 @@ export function ResponseCard({
     if (!allowAnnotationIsland) return
 
     const annotation = (annotations ?? []).find(item => item.id === annotationId)
-    const noteText = annotation ? getAnnotationNoteText(annotation) : ''
+    const noteText = annotation ? getAnnotationEditorText(annotation) : ''
+    const nextEditorKind = annotation ? getAnnotationEditorKind(annotation) : 'note'
 
     const transition = buildAnnotationChipEntryTransition()
 
     setSelectionMenuTransitionConfig(transition)
     triggerSelectionMenuEntryReplay()
-    openFromAnnotation({ annotationId, index, anchorX, anchorY }, noteText, mode)
+    openFromAnnotation({ annotationId, index, anchorX, anchorY }, noteText, mode, nextEditorKind)
   }, [allowAnnotationIsland, annotations, triggerSelectionMenuEntryReplay, openFromAnnotation])
 
   useEffect(() => {
@@ -2048,7 +2091,8 @@ export function ResponseCard({
     const consumed = consumeExternalOpenRequest(openAnnotationRequest, {
       messageId,
       annotations,
-      getNoteText: getAnnotationNoteText,
+      getNoteText: getAnnotationEditorText,
+      getEditorKind: getAnnotationEditorKind,
       fallbackAnchor,
     })
 
@@ -2255,7 +2299,7 @@ export function ResponseCard({
                   },
                 ],
               },
-              style: { color: 'yellow' },
+              style: { color: getAnnotationDefaultColor('highlight') },
             }
             onAddAnnotation(messageId, annotation)
           }
@@ -2331,9 +2375,13 @@ export function ResponseCard({
       draft={followUpDraft}
       onDraftChange={setFollowUpDraft}
       onOpenFollowUp={handleOpenFollowUpView}
+      onOpenNote={handleOpenNoteView}
+      onHighlight={handleHighlightSelection}
       onCancel={handleCancelFollowUp}
       onRequestBack={handleSelectionMenuRequestBack}
       onRequestEdit={handleRequestFollowUpEdit}
+      editorKind={editorKind}
+      copyText={pendingSelection?.selectedText}
       onSubmit={handleSubmitFollowUp}
       onSubmitAndSend={handleSubmitAndSendFollowUp}
       onDelete={activeAnnotationDetail ? handleDeleteActiveAnnotation : undefined}
@@ -2349,7 +2397,7 @@ export function ResponseCard({
       rects={annotationOverlay.rects}
       chips={annotationOverlay.chips}
       annotations={renderedAnnotations}
-      getTooltipText={(annotation) => formatAnnotationFollowUpTooltipText(annotation)}
+      getTooltipText={(annotation) => formatAnnotationTooltipText(annotation)}
       allowChipOpen={allowAnnotationIsland}
       onChipOpen={({ annotationId, index, anchorX, anchorY, mode }) => {
         handleOpenAnnotationDetail(annotationId, index, anchorX, anchorY, mode)
@@ -2541,6 +2589,7 @@ export function ResponseCard({
           sessionId={sessionId}
           messageId={messageId}
           annotations={annotations}
+          annotationIndexOverrides={annotationIndexOverrides}
           onAddAnnotation={onAddAnnotation}
           onRemoveAnnotation={onRemoveAnnotation}
           onUpdateAnnotation={onUpdateAnnotation}
@@ -2727,6 +2776,7 @@ export const TurnCard = React.memo(function TurnCard({
   sendMessageKey = 'enter',
   onSaveAndSendFollowUp,
   hasActiveFollowUpAnnotations = false,
+  annotationIndexOverrides,
   openAnnotationRequest,
   annotationInteractionMode = 'interactive',
 }: TurnCardProps) {
@@ -3089,6 +3139,7 @@ export const TurnCard = React.memo(function TurnCard({
             onBranch={onBranch ? (options?: { newPanel?: boolean }) => onBranch(planActivity.messageId ?? planActivity.id, options) : undefined}
             sendMessageKey={sendMessageKey}
             hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
+            annotationIndexOverrides={annotationIndexOverrides}
             openAnnotationRequest={openAnnotationRequest}
             annotationInteractionMode={annotationInteractionMode}
           />
@@ -3128,6 +3179,7 @@ export const TurnCard = React.memo(function TurnCard({
                 onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
                 sendMessageKey={sendMessageKey}
                 hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
+                annotationIndexOverrides={annotationIndexOverrides}
                 openAnnotationRequest={openAnnotationRequest}
                 annotationInteractionMode={annotationInteractionMode}
               />
@@ -3160,6 +3212,7 @@ export const TurnCard = React.memo(function TurnCard({
             onBranch={onBranch && response.messageId ? (options?: { newPanel?: boolean }) => onBranch(response.messageId!, options) : undefined}
             sendMessageKey={sendMessageKey}
             hasActiveFollowUpAnnotations={hasActiveFollowUpAnnotations}
+            annotationIndexOverrides={annotationIndexOverrides}
             openAnnotationRequest={openAnnotationRequest}
             annotationInteractionMode={annotationInteractionMode}
           />
@@ -3201,6 +3254,9 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Re-render when active follow-up annotation state changes (plan CTA label)
   if (prev.hasActiveFollowUpAnnotations !== next.hasActiveFollowUpAnnotations) return false
+
+  // Re-render when global follow-up numbering changes
+  if (prev.annotationIndexOverrides !== next.annotationIndexOverrides) return false
 
   // For complete, non-streaming turns: skip re-render only when both
   // session and turn identities match. Prevents stale local UI state from

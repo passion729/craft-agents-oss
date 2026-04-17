@@ -9,13 +9,14 @@ import {
   consolidateRectsByLine,
   type AnnotationOverlayRect,
 } from './annotation-core'
-import { getAnnotationFollowUpState } from './follow-up-state'
+import { getAnnotationDisplayColor, getAnnotationFollowUpState, shouldRenderAnnotationChip } from './follow-up-state'
 
 export type AnnotationOverlayChip = {
   id: string
   index: number
   left: number
   top: number
+  colorName?: string
   pendingFollowUp?: boolean
   sentFollowUp?: boolean
 }
@@ -51,6 +52,7 @@ export function computeAnnotationOverlayGeometry({
   const chips: AnnotationOverlayChip[] = []
 
   for (const item of resolution.resolved) {
+    const colorName = getAnnotationDisplayColor(item.annotation)
     const followUpState = getAnnotationFollowUpState(item.annotation)
     const pendingFollowUp = followUpState === 'pending'
     const sentFollowUp = followUpState === 'sent'
@@ -62,7 +64,8 @@ export function computeAnnotationOverlayGeometry({
         top: rect.top - rootRect.top,
         width: rect.width,
         height: rect.height,
-        color: annotationColorToCss(item.annotation.style?.color),
+        color: annotationColorToCss(colorName),
+        colorName,
         pendingFollowUp,
         sentFollowUp,
       }))
@@ -71,7 +74,7 @@ export function computeAnnotationOverlayGeometry({
     rects.push(...lineRects)
 
     const annotationIndex = annotationIndexOverrides?.get(item.annotation.id) ?? annotationIndexById.get(item.annotation.id)
-    if (annotationIndex == null || lineRects.length === 0) {
+    if (annotationIndex == null || lineRects.length === 0 || !shouldRenderAnnotationChip(item.annotation)) {
       continue
     }
 
@@ -88,6 +91,7 @@ export function computeAnnotationOverlayGeometry({
       index: annotationIndex,
       left: anchorRect.left + anchorRect.width,
       top: anchorRect.top,
+      colorName,
       pendingFollowUp,
       sentFollowUp,
     })

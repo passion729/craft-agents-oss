@@ -52,6 +52,12 @@
   /* === SHADOW OPACITY (light mode = subtle, dark mode = stronger) === */
   --shadow-border-opacity: 0.08;            /* Border ring opacity */
   --shadow-blur-opacity: 0.06;              /* Blur layers opacity */
+  --annotation-fill-strength: 22%;
+  --annotation-chip-default-strength: 22%;
+  --annotation-chip-pending-strength: 28%;
+  --annotation-chip-sent-strength: 12%;
+  --annotation-stroke-opacity: 0.22;
+  --annotation-pending-stroke-opacity: 0.32;
 
   /* === SHADOW VALUES (reusable across utility classes and component overrides) === */
   --shadow-minimal:
@@ -171,6 +177,12 @@
   /* === SHADOW OPACITY (stronger in dark mode) === */
   --shadow-border-opacity: 0.15;
   --shadow-blur-opacity: 0.12;
+  --annotation-fill-strength: 34%;
+  --annotation-chip-default-strength: 32%;
+  --annotation-chip-pending-strength: 40%;
+  --annotation-chip-sent-strength: 18%;
+  --annotation-stroke-opacity: 0.34;
+  --annotation-pending-stroke-opacity: 0.46;
 
   /* === MIX VARIANTS === */
   --foreground-2: color-mix(in oklch, var(--foreground) 2%, var(--background));

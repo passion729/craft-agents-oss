@@ -2,11 +2,17 @@ import type { AnnotationV1 } from '@craft-agent/core'
 
 export {
   type AnnotationFollowUpState,
+  type AnnotationKind,
   asRecord,
   normalizeFollowUpText,
   getAnnotationNoteText,
+  getAnnotationFollowUpText,
+  getAnnotationKind,
+  getAnnotationEditorKind,
+  getAnnotationEditorText,
   getAnnotationFollowUpState,
   isAnnotationFollowUpSent,
+  formatAnnotationTooltipText,
 } from '../annotations/follow-up-state'
 
 export function extractAnnotationSelectedText(annotation: AnnotationV1, messageContent: string): string {

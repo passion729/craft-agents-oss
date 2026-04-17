@@ -5,23 +5,22 @@ export type AnnotationChipInteraction = {
   state: AnnotationFollowUpState
   clickable: boolean
   tooltipOnly: boolean
-  openMode: 'view'
+  openMode: 'edit'
 }
 
 /**
  * Unified annotation chip behavior:
- * - sent follow-up chips are tooltip-only (no island open on click)
- * - pending/unsent chips open annotation detail in view mode
+ * - all annotation chips remain clickable, including sent follow-ups
+ * - click opens the editor view so highlights can be upgraded into notes/follow-ups
  */
 export function getAnnotationChipInteraction(annotation?: AnnotationV1 | null): AnnotationChipInteraction {
   const state = annotation ? getAnnotationFollowUpState(annotation) : 'none'
-  const isSent = state === 'sent'
 
   return {
     state,
-    clickable: !isSent,
-    tooltipOnly: isSent,
-    openMode: 'view',
+    clickable: true,
+    tooltipOnly: false,
+    openMode: 'edit',
   }
 }
 
@@ -29,16 +28,25 @@ export function isAnnotationChipClickable(annotation?: AnnotationV1 | null): boo
   return getAnnotationChipInteraction(annotation).clickable
 }
 
-export function getAnnotationChipOpenMode(): 'view' {
-  return 'view'
+export function getAnnotationChipOpenMode(): 'edit' {
+  return 'edit'
 }
 
 /**
- * Mouse-up events that originate from annotation index badges must not trigger
- * text-selection follow-up flows. This keeps chip clicks and text selection
+ * Mouse-up events that originate from annotation affordances must not trigger
+ * text-selection follow-up flows. This keeps chip clicks and rect-click
  * behavior consistent across inline and fullscreen renderers.
  */
 export function shouldIgnoreSelectionMouseUpTarget(target: EventTarget | null): boolean {
-  const targetElement = target instanceof Element ? target : null
-  return Boolean(targetElement?.closest('[data-ca-annotation-index]'))
+  const candidate = (target && typeof target === 'object' && 'closest' in target)
+    ? target as { closest: (selector: string) => Element | null }
+    : null
+  const parentCandidate = (target && typeof target === 'object' && 'parentElement' in target)
+    ? (target as { parentElement?: { closest?: (selector: string) => Element | null } | null }).parentElement
+    : null
+
+  return Boolean(
+    candidate?.closest('[data-ca-annotation-index], [data-ca-annotation-rect]')
+      || parentCandidate?.closest?.('[data-ca-annotation-index], [data-ca-annotation-rect]')
+  )
 }

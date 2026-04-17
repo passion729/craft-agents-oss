@@ -37,8 +37,13 @@ export {
   getFileTypeLabel,
   asRecord,
   getAnnotationNoteText,
+  getAnnotationFollowUpText,
+  getAnnotationKind,
+  getAnnotationEditorKind,
+  getAnnotationEditorText,
   getAnnotationFollowUpState,
   isAnnotationFollowUpSent,
+  formatAnnotationTooltipText,
   extractAnnotationSelectedText,
   normalizeFollowUpText,
   // Inline execution for EditPopover

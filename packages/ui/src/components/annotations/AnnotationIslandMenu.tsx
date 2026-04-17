@@ -1,6 +1,6 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
-import { CornerDownRight } from 'lucide-react'
+import { Check, Copy, CornerDownRight, Highlighter, NotebookPen } from 'lucide-react'
 import {
   Island,
   IslandContentView,
@@ -10,8 +10,9 @@ import {
 import { cn } from '../../lib/utils'
 import { clampIslandAnchorX, getDefaultIslandWidthEstimate } from './island-motion'
 import { useTranslation } from 'react-i18next'
+import type { AnnotationEditorKind } from './annotation-core'
 
-export type AnnotationIslandView = 'compact' | 'confirm-follow-up'
+export type AnnotationIslandView = 'compact' | 'editor'
 export type AnnotationIslandMode = 'edit' | 'view'
 
 export interface AnnotationIslandMenuProps {
@@ -26,9 +27,13 @@ export interface AnnotationIslandMenuProps {
   draft: string
   onDraftChange: (next: string) => void
   onOpenFollowUp: () => void
+  onOpenNote: () => void
+  onHighlight: () => void
   onCancel: () => void
   onRequestBack?: () => boolean
   onRequestEdit: () => void
+  editorKind: AnnotationEditorKind
+  copyText?: string
   onSubmit: (value: string) => void
   onSubmitAndSend?: (value: string) => void
   onDelete?: () => void
@@ -49,9 +54,13 @@ export function AnnotationIslandMenu({
   draft,
   onDraftChange,
   onOpenFollowUp,
+  onOpenNote,
+  onHighlight,
   onCancel,
   onRequestBack,
   onRequestEdit,
+  editorKind,
+  copyText,
   onSubmit,
   onSubmitAndSend,
   onDelete,
@@ -65,6 +74,7 @@ export function AnnotationIslandMenu({
   const { t } = useTranslation()
   const menuRef = React.useRef<HTMLDivElement>(null)
   const [activeViewSize, setActiveViewSize] = React.useState<{ width: number; height: number } | null>(null)
+  const [copied, setCopied] = React.useState(false)
 
   // Keep blocker behind the island menu when consumers pass a custom numeric zIndex
   // (for example TurnCard uses zIndex=50). Otherwise fall back to the semantic island token.
@@ -82,7 +92,24 @@ export function AnnotationIslandMenu({
     return clampIslandAnchorX(anchor.x, width)
   }, [anchor, activeViewSize])
 
+  React.useEffect(() => {
+    setCopied(false)
+  }, [sourceKey])
+
+  const handleCopySelection = React.useCallback(async () => {
+    const text = copyText?.trim()
+    if (!text || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return
+
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+  }, [copyText])
+
   if (!anchor) return null
+
+  const editorTitle = editorKind === 'note' ? t('chat.notes') : t('chat.followUp')
+  const editorPlaceholder = editorKind === 'note'
+    ? t('chat.notesPlaceholder')
+    : t('chat.annotationPlaceholder')
 
   const menuNode = (
     <div
@@ -126,22 +153,64 @@ export function AnnotationIslandMenu({
               <CornerDownRight className="h-3.5 w-3.5" />
               <span>{t('chat.followUp')}</span>
             </button>
+            <button
+              type="button"
+              onClick={onHighlight}
+              className={cn(
+                'h-[30px] px-2.5 rounded-[8px] text-[13px] font-medium inline-flex items-center gap-1.5',
+                'text-foreground/85 hover:text-foreground hover:bg-foreground/5',
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+              )}
+            >
+              <Highlighter className="h-3.5 w-3.5" />
+              <span>{t('chat.highlight')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onOpenNote}
+              className={cn(
+                'h-[30px] px-2.5 rounded-[8px] text-[13px] font-medium inline-flex items-center gap-1.5',
+                'text-foreground/85 hover:text-foreground hover:bg-foreground/5',
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+              )}
+            >
+              <NotebookPen className="h-3.5 w-3.5" />
+              <span>{t('chat.notes')}</span>
+            </button>
+            {copyText?.trim() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void handleCopySelection()
+                }}
+                className={cn(
+                  'h-[30px] px-2.5 rounded-[8px] text-[13px] font-medium inline-flex items-center gap-1.5',
+                  'text-foreground/85 hover:text-foreground hover:bg-foreground/5',
+                  'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                )}
+                title={copied ? t('common.copied') : t('common.copy')}
+              >
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>{copied ? t('common.copied') : t('common.copy')}</span>
+              </button>
+            ) : null}
           </div>
         </IslandContentView>
 
         <IslandFollowUpContentView
-          id="confirm-follow-up"
+          id="editor"
           mode={mode}
           value={draft}
           onValueChange={onDraftChange}
           onCancel={onCancel}
           onRequestEdit={onRequestEdit}
+          kind={editorKind}
           onSubmit={onSubmit}
-          onSubmitAndSend={onSubmitAndSend}
+          onSubmitAndSend={editorKind === 'follow-up' ? onSubmitAndSend : undefined}
           onDelete={onDelete}
-          title={t('chat.followUp')}
+          title={editorTitle}
           submitLabel={t('common.save')}
-          placeholder={t('chat.annotationPlaceholder')}
+          placeholder={editorPlaceholder}
           maxInputHeight={320}
           sendMessageKey={sendMessageKey}
           lockScroll

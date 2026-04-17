@@ -7,16 +7,21 @@ import {
   ANNOTATION_PREFIX_SUFFIX_WINDOW,
   SELECTION_POINTER_MAX_AGE_MS,
   clamp,
+  buildEditedAnnotationPatch,
+  createFollowUpSelectionAnnotation,
+  createHighlightSelectionAnnotation,
+  getAnnotationDefaultColor,
+  createNoteSelectionAnnotation,
   hasExistingTextRangeAnnotation,
   createSelectionPreviewAnnotation,
-  createTextSelectionAnnotation,
   getCanonicalText,
   resolveNodeOffset,
   type AnnotationOverlayRect,
 } from '../annotations/annotation-core'
 import {
-  getAnnotationNoteText,
-  formatAnnotationFollowUpTooltipText,
+  formatAnnotationTooltipText,
+  getAnnotationEditorKind,
+  getAnnotationEditorText,
 } from '../annotations/follow-up-state'
 import {
   type PointerSnapshot,
@@ -49,6 +54,7 @@ export interface AnnotatableMarkdownDocumentProps {
   messageId: string
   sessionId?: string
   annotations?: AnnotationV1[]
+  annotationIndexOverrides?: Map<string, number>
   onAddAnnotation?: (messageId: string, annotation: AnnotationV1) => void
   onRemoveAnnotation?: (messageId: string, annotationId: string) => void
   onUpdateAnnotation?: (messageId: string, annotationId: string, patch: Partial<AnnotationV1>) => void
@@ -65,6 +71,7 @@ export function AnnotatableMarkdownDocument({
   messageId,
   sessionId,
   annotations,
+  annotationIndexOverrides,
   onAddAnnotation,
   onRemoveAnnotation,
   onUpdateAnnotation,
@@ -86,6 +93,7 @@ export function AnnotatableMarkdownDocument({
     setDraft: setFollowUpDraft,
     openFromSelection,
     openFollowUpFromSelection,
+    openNoteFromSelection,
     openFromAnnotation,
     requestEdit,
     cancelFollowUp,
@@ -99,6 +107,7 @@ export function AnnotatableMarkdownDocument({
   const selectionMenuView = interactionState.selectionMenuView
   const followUpDraft = interactionState.followUpDraft
   const followUpMode = interactionState.followUpMode
+  const editorKind = interactionState.editorKind
   const activeAnnotationDetail = interactionState.activeAnnotationDetail
   const selectionMenuAnchor = getAnnotationInteractionAnchor(interactionState)
   const selectionMenuSourceKey = React.useMemo(() => {
@@ -145,7 +154,7 @@ export function AnnotatableMarkdownDocument({
   const renderedAnnotations = React.useMemo(() => {
     const persisted = annotations ?? []
 
-    if (!pendingSelection || selectionMenuView !== 'confirm-follow-up') {
+    if (!pendingSelection || selectionMenuView !== 'editor') {
       return persisted
     }
 
@@ -155,9 +164,14 @@ export function AnnotatableMarkdownDocument({
 
     return [
       ...persisted,
-      createSelectionPreviewAnnotation(messageId, pendingSelection, sessionId ?? ''),
+      createSelectionPreviewAnnotation(
+        messageId,
+        pendingSelection,
+        editorKind === 'follow-up' ? 'follow-up' : 'note',
+        sessionId ?? '',
+      ),
     ]
-  }, [annotations, pendingSelection, selectionMenuView, messageId, sessionId])
+  }, [annotations, editorKind, pendingSelection, selectionMenuView, messageId, sessionId])
 
   const activeAnnotation = React.useMemo(() => {
     if (!activeAnnotationDetail) return null
@@ -183,6 +197,7 @@ export function AnnotatableMarkdownDocument({
         root,
         renderedAnnotations,
         persistedAnnotations: annotations,
+        annotationIndexOverrides,
       })
 
       for (const annotation of renderedAnnotations) {
@@ -198,7 +213,7 @@ export function AnnotatableMarkdownDocument({
     return () => {
       window.removeEventListener('resize', recomputeOverlay)
     }
-  }, [renderedAnnotations, annotations, content])
+  }, [renderedAnnotations, annotations, annotationIndexOverrides, content])
 
   React.useEffect(() => {
     if (!canAnnotate) {
@@ -211,6 +226,37 @@ export function AnnotatableMarkdownDocument({
     clearDomSelection()
     openFollowUpFromSelection()
   }, [pendingSelection, openFollowUpFromSelection])
+
+  const handleOpenNoteView = React.useCallback(() => {
+    if (!pendingSelection) return
+    clearDomSelection()
+    openNoteFromSelection()
+  }, [pendingSelection, openNoteFromSelection])
+
+  const handleHighlightSelection = React.useCallback(() => {
+    if (!pendingSelection || !canAnnotate || !onAddAnnotation) {
+      closeSelectionMenu()
+      return
+    }
+
+    if (hasExistingTextRangeAnnotation(annotations, pendingSelection.start, pendingSelection.end)) {
+      closeSelectionMenu()
+      return
+    }
+
+    onAddAnnotation(messageId, createHighlightSelectionAnnotation(messageId, pendingSelection, sessionId ?? ''))
+    markSubmitSuccess()
+    clearDomSelection()
+  }, [
+    annotations,
+    canAnnotate,
+    closeSelectionMenu,
+    markSubmitSuccess,
+    messageId,
+    onAddAnnotation,
+    pendingSelection,
+    sessionId,
+  ])
 
   const handleRequestFollowUpEdit = React.useCallback(() => {
     requestEdit()
@@ -225,30 +271,7 @@ export function AnnotatableMarkdownDocument({
         return
       }
 
-      const existingOtherBodies = activeAnnotation.body.filter(body => body.type !== 'highlight' && body.type !== 'note')
-      const nextBody: AnnotationV1['body'] = [
-        { type: 'highlight' },
-        ...(normalizedNote.length > 0 ? [{ type: 'note', text: normalizedNote, format: 'plain' } as const] : []),
-        ...existingOtherBodies,
-      ]
-
-      const nextMeta = { ...(activeAnnotation.meta ?? {}) }
-      delete nextMeta.followUp
-
-      onUpdateAnnotation(messageId, activeAnnotationDetail.annotationId, {
-        body: nextBody,
-        intent: normalizedNote.length > 0 ? 'comment' : 'highlight',
-        updatedAt: Date.now(),
-        meta: normalizedNote.length > 0
-          ? {
-              ...nextMeta,
-              followUp: {
-                text: normalizedNote,
-                updatedAt: Date.now(),
-              },
-            }
-          : (Object.keys(nextMeta).length > 0 ? nextMeta : undefined),
-      })
+      onUpdateAnnotation(messageId, activeAnnotationDetail.annotationId, buildEditedAnnotationPatch(activeAnnotation, normalizedNote, editorKind))
 
       markSubmitSuccess()
       return
@@ -259,11 +282,25 @@ export function AnnotatableMarkdownDocument({
       return
     }
 
-    const annotation = createTextSelectionAnnotation(messageId, pendingSelection, normalizedNote, sessionId ?? '')
+    const annotation = editorKind === 'follow-up'
+      ? createFollowUpSelectionAnnotation(messageId, pendingSelection, normalizedNote, sessionId ?? '')
+      : createNoteSelectionAnnotation(messageId, pendingSelection, normalizedNote, sessionId ?? '')
     onAddAnnotation(messageId, annotation)
     markSubmitSuccess()
     clearDomSelection()
-  }, [activeAnnotationDetail, onUpdateAnnotation, activeAnnotation, closeSelectionMenu, pendingSelection, canAnnotate, onAddAnnotation, messageId, sessionId, markSubmitSuccess])
+  }, [
+    activeAnnotation,
+    activeAnnotationDetail,
+    canAnnotate,
+    closeSelectionMenu,
+    editorKind,
+    markSubmitSuccess,
+    messageId,
+    onAddAnnotation,
+    onUpdateAnnotation,
+    pendingSelection,
+    sessionId,
+  ])
 
   const handleCancelFollowUp = useAnnotationCancelRestore({
     contentRootRef: contentLayerRef,
@@ -284,11 +321,12 @@ export function AnnotatableMarkdownDocument({
     mode: AnnotationIslandMode = 'view'
   ) => {
     const annotation = (annotations ?? []).find(item => item.id === annotationId)
-    const noteText = annotation ? getAnnotationNoteText(annotation) : ''
+    const noteText = annotation ? getAnnotationEditorText(annotation) : ''
+    const nextEditorKind = annotation ? getAnnotationEditorKind(annotation) : 'note'
 
     setSelectionMenuTransitionConfig(buildAnnotationChipEntryTransition())
     triggerSelectionMenuEntryReplay()
-    openFromAnnotation({ annotationId, index, anchorX, anchorY }, noteText, mode)
+    openFromAnnotation({ annotationId, index, anchorX, anchorY }, noteText, mode, nextEditorKind)
     selectionMenuOpenedAtRef.current = Date.now()
   }, [annotations, triggerSelectionMenuEntryReplay, openFromAnnotation])
 
@@ -302,7 +340,8 @@ export function AnnotatableMarkdownDocument({
     const consumed = consumeExternalOpenRequest(openAnnotationRequest, {
       messageId,
       annotations,
-      getNoteText: getAnnotationNoteText,
+      getNoteText: getAnnotationEditorText,
+      getEditorKind: getAnnotationEditorKind,
       fallbackAnchor,
     })
 
@@ -489,7 +528,7 @@ export function AnnotatableMarkdownDocument({
                   },
                 ],
               },
-              style: { color: 'yellow' },
+              style: { color: getAnnotationDefaultColor('highlight') },
             }
             onAddAnnotation(messageId, annotation)
           }
@@ -602,9 +641,13 @@ export function AnnotatableMarkdownDocument({
       draft={followUpDraft}
       onDraftChange={setFollowUpDraft}
       onOpenFollowUp={handleOpenFollowUpView}
+      onOpenNote={handleOpenNoteView}
+      onHighlight={handleHighlightSelection}
       onCancel={handleCancelFollowUp}
       onRequestBack={handleSelectionMenuRequestBack}
       onRequestEdit={handleRequestFollowUpEdit}
+      editorKind={editorKind}
+      copyText={pendingSelection?.selectedText}
       onSubmit={handleSubmitFollowUp}
       onDelete={activeAnnotationDetail ? handleDeleteActiveAnnotation : undefined}
       sendMessageKey={sendMessageKey}
@@ -631,7 +674,7 @@ export function AnnotatableMarkdownDocument({
           rects={annotationOverlay.rects}
           chips={annotationOverlay.chips}
           annotations={renderedAnnotations}
-          getTooltipText={(annotation) => formatAnnotationFollowUpTooltipText(annotation)}
+          getTooltipText={(annotation) => formatAnnotationTooltipText(annotation)}
           onChipOpen={({ annotationId, index, anchorX, anchorY, mode }) => {
             handleOpenAnnotationDetail(annotationId, index, anchorX, anchorY, mode)
           }}

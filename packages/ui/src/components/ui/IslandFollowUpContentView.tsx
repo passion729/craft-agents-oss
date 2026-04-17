@@ -10,6 +10,7 @@ import {
 } from './StyledDropdown'
 
 export type IslandFollowUpMode = 'edit' | 'view'
+export type IslandFollowUpKind = 'follow-up' | 'note'
 
 export interface IslandFollowUpContentViewProps {
   id: string
@@ -32,6 +33,11 @@ export interface IslandFollowUpContentViewProps {
   blockOutsideInteraction?: boolean
   mode?: IslandFollowUpMode
   onRequestEdit?: () => void
+  kind?: IslandFollowUpKind
+  availableKinds?: IslandFollowUpKind[]
+  onKindChange?: (kind: IslandFollowUpKind) => void
+  noteLabel?: string
+  followUpLabel?: string
 }
 
 /**
@@ -62,6 +68,11 @@ export function IslandFollowUpContentView({
   blockOutsideInteraction = false,
   mode = 'edit',
   onRequestEdit,
+  kind = 'follow-up',
+  availableKinds = ['follow-up'],
+  onKindChange,
+  noteLabel,
+  followUpLabel,
 }: IslandFollowUpContentViewProps) {
   const { t } = useTranslation()
   const title = titleProp ?? t('chat.followUp')
@@ -70,6 +81,8 @@ export function IslandFollowUpContentView({
   const submitAndSendLabel = submitAndSendLabelProp ?? t('chat.followUpSaveAndSend')
   const editLabel = editLabelProp ?? t('common.edit')
   const deleteLabel = deleteLabelProp ?? t('common.delete')
+  const resolvedNoteLabel = noteLabel ?? t('settings.preferences.notes')
+  const resolvedFollowUpLabel = followUpLabel ?? t('chat.followUp')
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const measureTextareaRef = React.useRef<HTMLTextAreaElement | null>(null)
   const isViewMode = mode === 'view'
@@ -139,6 +152,30 @@ export function IslandFollowUpContentView({
         <div className="flex items-center">
           <div className="pl-[4px] text-sm font-medium">{title}</div>
         </div>
+
+        {availableKinds.length > 1 && (
+          <div className="inline-flex rounded-[8px] bg-background shadow-minimal p-0.5">
+            {availableKinds.map((item) => {
+              const isActive = item === kind
+              const label = item === 'note' ? resolvedNoteLabel : resolvedFollowUpLabel
+
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => onKindChange?.(item)}
+                  className={
+                    isActive
+                      ? 'h-7 px-2.5 rounded-[6px] text-xs font-medium bg-foreground/8 text-foreground'
+                      : 'h-7 px-2.5 rounded-[6px] text-xs font-medium text-foreground/70 hover:bg-foreground/5'
+                  }
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         <div className="relative rounded-[8px] px-0 py-1">
           <textarea

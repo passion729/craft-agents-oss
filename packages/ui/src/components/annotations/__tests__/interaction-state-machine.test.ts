@@ -6,7 +6,7 @@ import {
 } from '../interaction-state-machine'
 
 describe('annotation interaction state machine', () => {
-  it('opens selection into compact view and then confirm follow-up', () => {
+  it('opens selection into compact view and then editor follow-up mode', () => {
     const withSelection = annotationInteractionReducer(
       initialAnnotationInteractionState,
       annotationInteractionActions.openFromSelection({
@@ -30,8 +30,9 @@ describe('annotation interaction state machine', () => {
       annotationInteractionActions.openFollowUpFromSelection(),
     )
 
-    expect(confirm.selectionMenuView).toBe('confirm-follow-up')
+    expect(confirm.selectionMenuView).toBe('editor')
     expect(confirm.followUpMode).toBe('edit')
+    expect(confirm.editorKind).toBe('follow-up')
   })
 
   it('opens annotation detail in view mode and keeps anchor', () => {
@@ -41,13 +42,15 @@ describe('annotation interaction state machine', () => {
         { annotationId: 'ann-1', index: 2, anchorX: 300, anchorY: 160 },
         'Existing note',
         'view',
+        'note',
       ),
     )
 
     expect(next.pendingSelection).toBeNull()
     expect(next.activeAnnotationDetail?.annotationId).toBe('ann-1')
-    expect(next.selectionMenuView).toBe('confirm-follow-up')
+    expect(next.selectionMenuView).toBe('editor')
     expect(next.followUpMode).toBe('view')
+    expect(next.editorKind).toBe('note')
     expect(next.followUpDraft).toBe('Existing note')
     expect(next.selectionMenuAnchor).toEqual({ x: 300, y: 160 })
   })
@@ -59,6 +62,7 @@ describe('annotation interaction state machine', () => {
         { annotationId: 'ann-2', index: 1, anchorX: 220, anchorY: 120 },
         'note',
         'view',
+        'note',
       ),
     )
 
@@ -88,5 +92,27 @@ describe('annotation interaction state machine', () => {
     expect(cancelled.selectionMenuView).toBe('compact')
     expect(cancelled.activeAnnotationDetail).toBeNull()
     expect(cancelled.followUpDraft).toBe('')
+  })
+
+  it('switches editor kind without losing draft text', () => {
+    const selectionState = annotationInteractionReducer(
+      initialAnnotationInteractionState,
+      annotationInteractionActions.openFromSelection({
+        start: 2,
+        end: 7,
+        selectedText: 'pending',
+        prefix: 'p',
+        suffix: 's',
+        anchorX: 140,
+        anchorY: 210,
+      }),
+    )
+    const noteEditor = annotationInteractionReducer(selectionState, annotationInteractionActions.openNoteFromSelection())
+    const drafted = annotationInteractionReducer(noteEditor, annotationInteractionActions.setDraft('Local note'))
+    const switched = annotationInteractionReducer(drafted, annotationInteractionActions.setEditorKind('follow-up'))
+
+    expect(switched.selectionMenuView).toBe('editor')
+    expect(switched.editorKind).toBe('follow-up')
+    expect(switched.followUpDraft).toBe('Local note')
   })
 })

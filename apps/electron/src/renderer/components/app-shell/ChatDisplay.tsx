@@ -52,7 +52,7 @@ import {
   formatActivityAsMarkdown,
   getAssistantTurnUiKey,
   asRecord,
-  getAnnotationNoteText,
+  getAnnotationFollowUpText,
   isAnnotationFollowUpSent,
   extractAnnotationSelectedText,
   normalizeFollowUpText,
@@ -595,6 +595,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     nonce: number
   } | null>(null)
   const followUpOpenNonceRef = React.useRef(0)
+  const [optimisticallyRemovedFollowUpIds, setOptimisticallyRemovedFollowUpIds] = React.useState<Set<string>>(() => new Set())
 
   // Navigation for session branching
   const { navigate } = useNavigation()
@@ -1125,7 +1126,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       if (!message.annotations?.length) continue
 
       for (const annotation of message.annotations) {
-        const note = getAnnotationNoteText(annotation)
+        const note = getAnnotationFollowUpText(annotation)
         if (!note) continue
         if (isAnnotationFollowUpSent(annotation)) continue
 
@@ -1144,8 +1145,36 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     return pending.sort((a, b) => a.createdAt - b.createdAt)
   }, [session?.messages])
 
+  const visiblePendingFollowUpAnnotations = useMemo(() => {
+    if (optimisticallyRemovedFollowUpIds.size === 0) return pendingFollowUpAnnotations
+    return pendingFollowUpAnnotations.filter(
+      (item) => !optimisticallyRemovedFollowUpIds.has(`${item.messageId}:${item.annotationId}`)
+    )
+  }, [optimisticallyRemovedFollowUpIds, pendingFollowUpAnnotations])
+
+  React.useEffect(() => {
+    if (optimisticallyRemovedFollowUpIds.size === 0) return
+
+    const currentIds = new Set(
+      pendingFollowUpAnnotations.map((item) => `${item.messageId}:${item.annotationId}`)
+    )
+
+    setOptimisticallyRemovedFollowUpIds((previous) => {
+      let changed = false
+      const next = new Set<string>()
+      for (const id of previous) {
+        if (currentIds.has(id)) {
+          next.add(id)
+        } else {
+          changed = true
+        }
+      }
+      return changed ? next : previous
+    })
+  }, [optimisticallyRemovedFollowUpIds.size, pendingFollowUpAnnotations])
+
   const followUpInputItems = useMemo(() => {
-    return pendingFollowUpAnnotations.map((followUp, idx) => ({
+    return visiblePendingFollowUpAnnotations.map((followUp, idx) => ({
       id: `${followUp.messageId}:${followUp.annotationId}`,
       messageId: followUp.messageId,
       annotationId: followUp.annotationId,
@@ -1154,7 +1183,16 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       selectedText: normalizeExcerptForMessage(followUp.selectedText, 260),
       color: followUp.color,
     }))
-  }, [pendingFollowUpAnnotations])
+  }, [visiblePendingFollowUpAnnotations])
+
+  const followUpAnnotationIndexOverrides = useMemo(() => {
+    return new Map(
+      visiblePendingFollowUpAnnotations.map((followUp, idx) => [
+        followUp.annotationId,
+        idx + 1,
+      ])
+    )
+  }, [visiblePendingFollowUpAnnotations])
 
   // Track scroll position to toggle sticky-bottom behavior
   // - User scrolls up → unstick (stop auto-scrolling)
@@ -1286,7 +1324,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Backend handles interruption and queueing if currently processing
   const handleSubmit = (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => {
     const hasBaseMessage = message.trim().length > 0
-    const followUpSection = formatFollowUpSection(pendingFollowUpAnnotations, {
+    const followUpSection = formatFollowUpSection(visiblePendingFollowUpAnnotations, {
       includeTopSeparator: hasBaseMessage,
     })
     const messageWithFollowUps = followUpSection.length > 0
@@ -1301,9 +1339,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     // Persist sent marker on follow-up annotations so TurnCard can distinguish
     // sent vs pending follow-ups. If user edits a follow-up later, TurnCard
     // clears these markers and the annotation becomes pending again.
-    if (session && pendingFollowUpAnnotations.length > 0) {
+    if (session && visiblePendingFollowUpAnnotations.length > 0) {
       const sentAt = Date.now()
-      void Promise.all(pendingFollowUpAnnotations.map((followUp) => {
+      void Promise.all(visiblePendingFollowUpAnnotations.map((followUp) => {
         const currentMeta = followUp.meta ?? {}
         const currentFollowUpMeta = asRecord(currentMeta.followUp) ?? {}
 
@@ -1572,7 +1610,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     setOpenAnnotationRequest({
       messageId: item.messageId,
       annotationId: item.annotationId,
-      mode: 'view',
+      mode: 'edit',
       anchorX: anchor?.x,
       anchorY: anchor?.y,
       nonce: followUpOpenNonceRef.current,
@@ -1787,7 +1825,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       <TurnCard
                         sessionId={session.id}
                         sessionFolderPath={session.sessionFolderPath}
-                        hasActiveFollowUpAnnotations={pendingFollowUpAnnotations.length > 0}
+                        hasActiveFollowUpAnnotations={visiblePendingFollowUpAnnotations.length > 0}
+                        annotationIndexOverrides={followUpAnnotationIndexOverrides}
                         turnId={turn.turnId}
                         activities={turn.activities}
                         response={turn.response}
@@ -1852,6 +1891,17 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         }}
                         onRemoveAnnotation={async (messageId, annotationId) => {
                           if (!session) return
+                          const followUpKey = `${messageId}:${annotationId}`
+                          setOptimisticallyRemovedFollowUpIds((previous) => {
+                            const next = new Set(previous)
+                            next.add(followUpKey)
+                            return next
+                          })
+                          setOpenAnnotationRequest((current) => (
+                            current?.messageId === messageId && current.annotationId === annotationId
+                              ? null
+                              : current
+                          ))
                           try {
                             await window.electronAPI.sessionCommand(session.id, {
                               type: 'removeAnnotation',
@@ -1859,6 +1909,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                               annotationId,
                             })
                           } catch (error) {
+                            setOptimisticallyRemovedFollowUpIds((previous) => {
+                              const next = new Set(previous)
+                              next.delete(followUpKey)
+                              return next
+                            })
                             toast.error(t('toast.couldNotRemoveHighlight'), {
                               description: error instanceof Error ? error.message : 'Unknown error',
                             })

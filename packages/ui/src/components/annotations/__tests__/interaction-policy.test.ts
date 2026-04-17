@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'bun:test'
-import { createTextSelectionAnnotation } from '../annotation-core'
+import { createFollowUpSelectionAnnotation, createHighlightSelectionAnnotation } from '../annotation-core'
 import {
   getAnnotationChipInteraction,
   isAnnotationChipClickable,
+  shouldIgnoreSelectionMouseUpTarget,
 } from '../interaction-policy'
 
 function createAnnotation(note = 'Follow-up note') {
-  return createTextSelectionAnnotation(
+  return createFollowUpSelectionAnnotation(
     'msg-1',
     {
       start: 0,
@@ -21,7 +22,7 @@ function createAnnotation(note = 'Follow-up note') {
 }
 
 describe('annotation interaction policy', () => {
-  it('treats sent annotations as tooltip-only and non-clickable', () => {
+  it('keeps sent annotations clickable so they can be edited', () => {
     const annotation = createAnnotation('Already sent')
     const meta = (annotation.meta ?? {}) as Record<string, unknown>
     meta.followUp = {
@@ -34,26 +35,26 @@ describe('annotation interaction policy', () => {
     const policy = getAnnotationChipInteraction(annotation)
 
     expect(policy.state).toBe('sent')
-    expect(policy.openMode).toBe('view')
-    expect(policy.clickable).toBe(false)
-    expect(policy.tooltipOnly).toBe(true)
-    expect(isAnnotationChipClickable(annotation)).toBe(false)
+    expect(policy.openMode).toBe('edit')
+    expect(policy.clickable).toBe(true)
+    expect(policy.tooltipOnly).toBe(false)
+    expect(isAnnotationChipClickable(annotation)).toBe(true)
   })
 
-  it('keeps pending annotations clickable in view mode', () => {
+  it('keeps pending annotations clickable in edit mode', () => {
     const annotation = createAnnotation('Needs follow-up')
 
     const policy = getAnnotationChipInteraction(annotation)
 
     expect(policy.state).toBe('pending')
-    expect(policy.openMode).toBe('view')
+    expect(policy.openMode).toBe('edit')
     expect(policy.clickable).toBe(true)
     expect(policy.tooltipOnly).toBe(false)
     expect(isAnnotationChipClickable(annotation)).toBe(true)
   })
 
   it('keeps note-less annotations clickable', () => {
-    const annotation = createTextSelectionAnnotation(
+    const annotation = createHighlightSelectionAnnotation(
       'msg-1',
       {
         start: 5,
@@ -62,7 +63,6 @@ describe('annotation interaction policy', () => {
         prefix: 'a ',
         suffix: ' b',
       },
-      '',
       'session-1',
     )
 
@@ -71,5 +71,13 @@ describe('annotation interaction policy', () => {
     expect(policy.state).toBe('none')
     expect(policy.clickable).toBe(true)
     expect(policy.tooltipOnly).toBe(false)
+  })
+
+  it('ignores mouse-up targets from clickable highlight rects', () => {
+    const target = {
+      closest: (selector: string) => (selector.includes('[data-ca-annotation-rect]') ? ({}) as Element : null),
+    }
+
+    expect(shouldIgnoreSelectionMouseUpTarget(target as unknown as EventTarget)).toBe(true)
   })
 })

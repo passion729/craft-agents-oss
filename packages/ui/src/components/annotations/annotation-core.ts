@@ -2,6 +2,8 @@ import type { AnnotationV1 } from '@craft-agent/core'
 
 export const ANNOTATION_PREFIX_SUFFIX_WINDOW = 24
 export const SELECTION_POINTER_MAX_AGE_MS = 1500
+export type AnnotationEditorKind = 'note' | 'follow-up'
+export type AnnotationSemanticKind = 'highlight' | 'note' | 'follow-up'
 
 export type TextAnnotationSelection = {
   start: number
@@ -32,6 +34,7 @@ export function hasExistingTextRangeAnnotation(
 export function createSelectionPreviewAnnotation(
   messageId: string,
   selection: TextAnnotationSelection,
+  kind: AnnotationSemanticKind = 'highlight',
   sessionId = '',
 ): AnnotationV1 {
   return {
@@ -55,32 +58,48 @@ export function createSelectionPreviewAnnotation(
         },
       ],
     },
-    style: { color: 'yellow' },
+    style: { color: getAnnotationDefaultColor(kind) },
     meta: {
       ephemeral: true,
-      source: 'follow-up-selection-preview',
+      annotationKind: kind,
+      source: 'annotation-selection-preview',
     },
   }
 }
 
-export function createTextSelectionAnnotation(
+type AnnotationMetaRecord = Record<string, unknown>
+
+export function getAnnotationDefaultColor(kind: AnnotationSemanticKind): string {
+  switch (kind) {
+    case 'note':
+      return 'pink'
+    case 'follow-up':
+      return 'blue'
+    case 'highlight':
+    default:
+      return 'yellow'
+  }
+}
+
+function asRecord(value: unknown): AnnotationMetaRecord | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as AnnotationMetaRecord
+    : null
+}
+
+function buildBaseSelectionAnnotation(
   messageId: string,
   selection: TextAnnotationSelection,
-  followUpNote?: string,
   sessionId = '',
 ): AnnotationV1 {
-  const note = followUpNote?.trim() ?? ''
-  const hasNote = note.length > 0
   const now = Date.now()
 
   return {
     id: `ann-${now}-${Math.random().toString(36).slice(2, 8)}`,
     schemaVersion: 1,
     createdAt: now,
-    intent: hasNote ? 'comment' : 'highlight',
-    body: hasNote
-      ? [{ type: 'highlight' }, { type: 'note', text: note, format: 'plain' }]
-      : [{ type: 'highlight' }],
+    intent: 'highlight',
+    body: [{ type: 'highlight' }],
     target: {
       source: {
         sessionId,
@@ -96,17 +115,162 @@ export function createTextSelectionAnnotation(
         },
       ],
     },
-    style: { color: 'yellow' },
-    ...(hasNote
+    style: { color: getAnnotationDefaultColor('highlight') },
+  }
+}
+
+export function createHighlightSelectionAnnotation(
+  messageId: string,
+  selection: TextAnnotationSelection,
+  sessionId = '',
+): AnnotationV1 {
+  return {
+    ...buildBaseSelectionAnnotation(messageId, selection, sessionId),
+    style: { color: getAnnotationDefaultColor('highlight') },
+    meta: {
+      annotationKind: 'highlight',
+    },
+  }
+}
+
+export function createNoteSelectionAnnotation(
+  messageId: string,
+  selection: TextAnnotationSelection,
+  noteText: string,
+  sessionId = '',
+): AnnotationV1 {
+  const note = noteText.trim()
+  if (note.length === 0) {
+    return createHighlightSelectionAnnotation(messageId, selection, sessionId)
+  }
+
+  return {
+    ...buildBaseSelectionAnnotation(messageId, selection, sessionId),
+    intent: 'comment',
+    body: [{ type: 'highlight' }, { type: 'note', text: note, format: 'plain' }],
+    style: { color: getAnnotationDefaultColor('note') },
+    meta: {
+      annotationKind: 'note',
+    },
+  }
+}
+
+export function createFollowUpSelectionAnnotation(
+  messageId: string,
+  selection: TextAnnotationSelection,
+  followUpText: string,
+  sessionId = '',
+): AnnotationV1 {
+  const note = followUpText.trim()
+  if (note.length === 0) {
+    return createHighlightSelectionAnnotation(messageId, selection, sessionId)
+  }
+
+  const annotation = buildBaseSelectionAnnotation(messageId, selection, sessionId)
+  return {
+    ...annotation,
+    intent: 'question',
+    style: { color: getAnnotationDefaultColor('follow-up') },
+    meta: {
+      annotationKind: 'follow-up',
+      followUp: {
+        text: note,
+        createdAt: annotation.createdAt,
+      },
+    },
+  }
+}
+
+export function createTextSelectionAnnotation(
+  messageId: string,
+  selection: TextAnnotationSelection,
+  followUpNote?: string,
+  sessionId = '',
+): AnnotationV1 {
+  return createFollowUpSelectionAnnotation(messageId, selection, followUpNote ?? '', sessionId)
+}
+
+export function buildEditedAnnotationPatch(
+  annotation: AnnotationV1,
+  draft: string,
+  editorKind: AnnotationEditorKind,
+): Partial<AnnotationV1> {
+  const normalized = draft.trim()
+  const now = Date.now()
+  const existingOtherBodies = annotation.body.filter(body => body.type !== 'highlight' && body.type !== 'note')
+  const currentMeta = { ...(annotation.meta ?? {}) }
+  const nextMeta = { ...currentMeta } as AnnotationMetaRecord
+
+  delete nextMeta.followUp
+  delete nextMeta.annotationKind
+
+  if (editorKind === 'follow-up' && normalized.length > 0) {
+    const existingFollowUp = asRecord(asRecord(currentMeta)?.followUp) ?? {}
+    const previousSentText = typeof existingFollowUp.lastSentText === 'string'
+      ? existingFollowUp.lastSentText.trim()
+      : (typeof existingFollowUp.sentText === 'string' ? existingFollowUp.sentText.trim() : '')
+    const nextFollowUp: AnnotationMetaRecord = {
+      ...existingFollowUp,
+      text: normalized,
+      updatedAt: now,
+      createdAt: typeof existingFollowUp.createdAt === 'number' ? existingFollowUp.createdAt : annotation.createdAt,
+    }
+
+    if (previousSentText !== normalized) {
+      delete nextFollowUp.lastSentAt
+      delete nextFollowUp.lastSentText
+      delete nextFollowUp.sentAt
+      delete nextFollowUp.sentText
+    }
+
+    return {
+      body: [{ type: 'highlight' }, ...existingOtherBodies],
+      intent: 'question',
+      updatedAt: now,
+      style: {
+        ...(annotation.style ?? {}),
+        color: getAnnotationDefaultColor('follow-up'),
+      },
+      meta: {
+        ...nextMeta,
+        annotationKind: 'follow-up',
+        followUp: nextFollowUp,
+      },
+    }
+  }
+
+  if (editorKind === 'note' && normalized.length > 0) {
+    return {
+      body: [{ type: 'highlight' }, { type: 'note', text: normalized, format: 'plain' }, ...existingOtherBodies],
+      intent: 'comment',
+      updatedAt: now,
+      style: {
+        ...(annotation.style ?? {}),
+        color: getAnnotationDefaultColor('note'),
+      },
+      meta: {
+        ...nextMeta,
+        annotationKind: 'note',
+      },
+    }
+  }
+
+  return {
+    body: [{ type: 'highlight' }, ...existingOtherBodies],
+    intent: 'highlight',
+    updatedAt: now,
+    style: {
+      ...(annotation.style ?? {}),
+      color: getAnnotationDefaultColor('highlight'),
+    },
+    meta: Object.keys(nextMeta).length > 0
       ? {
-          meta: {
-            followUp: {
-              text: note,
-              createdAt: now,
-            },
-          },
+          ...nextMeta,
+          annotationKind: 'highlight',
         }
-      : {}),
+      : {
+          annotationKind: 'highlight',
+        },
   }
 }
 
@@ -230,6 +394,7 @@ export type AnnotationOverlayRect = {
   width: number
   height: number
   color: string
+  colorName?: string
   pendingFollowUp?: boolean
   sentFollowUp?: boolean
 }
