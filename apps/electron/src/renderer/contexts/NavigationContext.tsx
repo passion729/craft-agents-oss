@@ -126,7 +126,7 @@ interface NavigationContextValue {
   navigateToSession: (sessionId: string) => void
 }
 
-const NavigationContext = createContext<NavigationContextValue | null>(null)
+export const NavigationContext = createContext<NavigationContextValue | null>(null)
 
 interface NavigationProviderProps {
   children: ReactNode
