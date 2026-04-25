@@ -1,12 +1,12 @@
 /**
- * Creates a `web_search` AgentTool backed by the given search provider.
+ * Creates a `web_search` ToolDefinition backed by the given search provider.
  *
  * The tool name is always `web_search` regardless of the underlying provider,
  * so the model doesn't need to know which backend is used.
  */
 
 import { Type } from '@sinclair/typebox';
-import type { AgentTool } from '@mariozechner/pi-agent-core';
+import type { ToolDefinition } from '@mariozechner/pi-coding-agent';
 import type { WebSearchProvider, WebSearchResult } from './types.ts';
 import { DDGSearchProvider } from './providers/ddg.ts';
 
@@ -74,7 +74,7 @@ function resolveQuery(params: {
 export function createSearchTool(
   provider: WebSearchProvider,
   fallbackProvider: WebSearchProvider = new DDGSearchProvider(),
-): AgentTool<typeof schema> {
+): ToolDefinition<typeof schema> {
   return {
     name: 'web_search',
     label: 'Web Search',
