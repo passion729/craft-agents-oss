@@ -336,6 +336,7 @@ export function UserMessageBubble({
   onFileClick,
   attachments,
   badges,
+  isPending,
   isQueued,
   compactMode,
 }: UserMessageBubbleProps) {
