@@ -44,6 +44,28 @@ import type {
 import type { Message } from '../../../shared/types'
 import { generateMessageId, appendMessage } from '../helpers'
 
+function clearUserMessageTransientState(
+  messages: Message[],
+  options: { preserveQueued?: boolean } = {}
+): Message[] {
+  const { preserveQueued = false } = options
+
+  return messages.map(m => {
+    if (m.role !== 'user') return m
+
+    const shouldClearPending = m.isPending === true
+    const shouldClearQueued = !preserveQueued && m.isQueued === true
+
+    if (!shouldClearPending && !shouldClearQueued) return m
+
+    return {
+      ...m,
+      ...(shouldClearPending ? { isPending: false } : {}),
+      ...(shouldClearQueued ? { isQueued: false } : {}),
+    }
+  })
+}
+
 /**
  * Handle complete - agent loop finished
  *
@@ -81,18 +103,10 @@ export function handleComplete(
     })
   }
 
-  // Clear isQueued from any user messages once the turn completes. Pi's steer
-  // path never emits a 'processing' status update to clear it (the message is
-  // injected mid-stream and absorbed into the current response), so this is
-  // the natural place to drop the indicator. Claude's queued path has already
-  // cleared via the 'processing' status update before this fires; this is
-  // a safe no-op for that case.
-  const hasQueuedUserBubbles = updatedMessages.some(m => m.role === 'user' && m.isQueued)
-  if (hasQueuedUserBubbles) {
-    updatedMessages = updatedMessages.map(m =>
-      m.role === 'user' && m.isQueued ? { ...m, isQueued: false } : m
-    )
-  }
+  // Clear transient user UI once the turn completes. Pi's steer path may not
+  // emit a later user_message update, so complete is the final place to drop
+  // optimistic shimmer and queued indicators.
+  updatedMessages = clearUserMessageTransientState(updatedMessages)
 
   return {
     state: {
@@ -128,6 +142,7 @@ export function handleError(
       ? { ...m, toolStatus: 'error' as const, toolResult: 'Error occurred', isError: true }
       : m
   )
+  const updatedMessages = clearUserMessageTransientState(messagesWithFailedTools)
 
   const errorMessage: Message = {
     id: generateMessageId(),
@@ -140,7 +155,7 @@ export function handleError(
     state: {
       session: {
         ...session,
-        messages: [...messagesWithFailedTools, errorMessage],
+        messages: [...updatedMessages, errorMessage],
         isProcessing: false,
         currentStatus: undefined,  // Clear any lingering status
       },
@@ -165,6 +180,7 @@ export function handleTypedError(
       ? { ...m, toolStatus: 'error' as const, toolResult: 'Error occurred', isError: true }
       : m
   )
+  const updatedMessages = clearUserMessageTransientState(messagesWithFailedTools)
 
   const errorMessage: Message = {
     id: generateMessageId(),
@@ -191,7 +207,7 @@ export function handleTypedError(
     state: {
       session: {
         ...session,
-        messages: [...messagesWithFailedTools, errorMessage],
+        messages: [...updatedMessages, errorMessage],
         isProcessing: false,
         currentStatus: undefined,  // Clear any lingering status
       },
@@ -309,7 +325,7 @@ export function handleInterrupted(
   // Clear transient streaming state (isPending, isStreaming) and mark running tools as interrupted
   // These fields are not persisted, so this matches the state after a reload
   // Also filter out status messages - they are transient UI state that shouldn't persist after interruption
-  const updatedMessages = session.messages
+  const updatedMessages = clearUserMessageTransientState(session.messages
     .filter(m => m.role !== 'status')  // Remove transient status messages
     // Only drop queued bubbles when the user explicitly stopped — silent
     // redirects auto-replay them so they must remain visible (#616).
@@ -324,7 +340,7 @@ export function handleInterrupted(
         return { ...m, isPending: false, isStreaming: false }
       }
       return m
-    })
+    }), { preserveQueued: !isUserInitiated })
 
   // Only add the "Response interrupted" message if provided (not a silent redirect)
   const messages = event.message
@@ -946,4 +962,3 @@ export function handleUsageUpdate(
     effects: [],
   }
 }
-

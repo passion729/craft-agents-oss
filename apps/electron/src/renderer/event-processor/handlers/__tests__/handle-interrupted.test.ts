@@ -48,7 +48,7 @@ describe('handleInterrupted (#616)', () => {
 
     it('still works when no queued bubbles exist', () => {
       const state = makeState([
-        { id: 'msg-1', role: 'user', content: 'first' },
+        { id: 'msg-1', role: 'user', content: 'first', isPending: true },
       ])
       const event: InterruptedEvent = {
         type: 'interrupted',
@@ -59,6 +59,7 @@ describe('handleInterrupted (#616)', () => {
       const next = handleInterrupted(state, event)
       expect(next.effects).toEqual([])
       expect(next.state.session.messages.map(m => m.id)).toContain('info-1')
+      expect((next.state.session.messages.find(m => m.id === 'msg-1') as any).isPending).toBe(false)
     })
   })
 
@@ -66,7 +67,7 @@ describe('handleInterrupted (#616)', () => {
     it('KEEPS queued bubbles in chat and does NOT emit restore_input (#616 fix)', () => {
       const state = makeState([
         { id: 'msg-1', role: 'user', content: 'first' },
-        { id: 'msg-2', role: 'user', content: 'queued during run', isQueued: true },
+        { id: 'msg-2', role: 'user', content: 'queued during run', isPending: true, isQueued: true },
       ])
 
       const event: InterruptedEvent = {
@@ -81,6 +82,9 @@ describe('handleInterrupted (#616)', () => {
       // queued bubble must remain so the user sees it
       const ids = next.state.session.messages.map(m => m.id)
       expect(ids).toContain('msg-2')
+      const queued = next.state.session.messages.find(m => m.id === 'msg-2') as any
+      expect(queued.isPending).toBe(false)
+      expect(queued.isQueued).toBe(true)
       // no info bubble appended
       expect(ids).not.toContain('info-1')
       // critically: no restore_input effect — backend will auto-replay

@@ -1703,6 +1703,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     // User turns - render with MemoizedMessageBubble
                     // Extra padding creates visual separation from AI responses
                     if (turn.type === 'user') {
+                      const isLatestUserTurn = !turns.slice(index + 1).some(t => t.type === 'user')
+                      const shouldAnimateUserBubble = !!session?.isProcessing && isLatestUserTurn
                       return (
                         <div
                           key={turnKey}
@@ -1720,6 +1722,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             onOpenUrl={onOpenUrl}
                             sessionId={session?.id}
                             compactMode={compactMode}
+                            animateUserBubble={shouldAnimateUserBubble}
                           />
                         </div>
                       )
@@ -2261,6 +2264,8 @@ interface MessageBubbleProps {
   compactMode?: boolean
   /** Callback to resend the user message that preceded an error */
   onRetry?: () => void
+  /** Whether the user bubble should show the active turn shimmer */
+  animateUserBubble?: boolean
 }
 
 /**
@@ -2348,6 +2353,7 @@ function MessageBubble({
   onPopOut,
   compactMode,
   onRetry,
+  animateUserBubble,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
 
@@ -2358,7 +2364,7 @@ function MessageBubble({
         content={message.content}
         attachments={message.attachments}
         badges={message.badges}
-        isPending={message.isPending}
+        isPending={message.isPending || animateUserBubble}
         isQueued={message.isQueued}
         onUrlClick={onOpenUrl}
         onFileClick={onOpenFile}
@@ -2496,7 +2502,10 @@ const MemoizedMessageBubble = React.memo(MessageBubble, (prev, next) => {
     prev.message.id === next.message.id &&
     prev.message.content === next.message.content &&
     prev.message.role === next.message.role &&
+    prev.message.isPending === next.message.isPending &&
+    prev.message.isQueued === next.message.isQueued &&
     prev.sessionId === next.sessionId &&
-    prev.compactMode === next.compactMode
+    prev.compactMode === next.compactMode &&
+    prev.animateUserBubble === next.animateUserBubble
   )
 })
