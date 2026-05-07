@@ -20,6 +20,7 @@ import { spawn } from "bun";
 import { execSync } from "child_process";
 import { existsSync, mkdirSync, statSync } from "fs";
 import { join } from "path";
+import { verifyJsFile } from "./build/verify-js";
 
 /**
  * Resolve a short git SHA for the build, suffixed with `+dirty` when the
@@ -47,22 +48,6 @@ const WORKER_DIR = join(ROOT_DIR, "packages/messaging-whatsapp-worker");
 const SOURCE = join(WORKER_DIR, "src/worker.ts");
 const DIST_DIR = join(WORKER_DIR, "dist");
 const OUTPUT = join(DIST_DIR, "worker.cjs");
-
-async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?: string }> {
-  if (!existsSync(filePath)) return { valid: false, error: "File does not exist" };
-  const stats = statSync(filePath);
-  if (stats.size === 0) return { valid: false, error: "File is empty" };
-
-  const proc = spawn({
-    cmd: ["node", "--check", filePath],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const stderr = await new Response(proc.stderr).text();
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) return { valid: false, error: stderr || "Syntax error" };
-  return { valid: true };
-}
 
 async function main(): Promise<void> {
   if (!existsSync(SOURCE)) {

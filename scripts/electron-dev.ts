@@ -8,6 +8,7 @@ import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "f
 import { join, basename } from "path";
 import * as esbuild from "esbuild";
 import { downloadUv, type Platform, type Arch } from "./build/common";
+import { verifyJsFile } from "./build/verify-js";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
@@ -337,38 +338,6 @@ async function buildPiAgentServer(): Promise<{ success: boolean; error?: string 
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
-  }
-}
-
-// Verify a built JavaScript bundle is parseable. `node --check` performs
-// syntax-only validation — it does NOT execute module-level code or resolve
-// `require()`, so Electron-specific top-level requires (e.g. @sentry/electron)
-// are safe. This catches truncated writes, FS corruption, and edge cases that
-// esbuild's build-success signal doesn't cover.
-async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?: string }> {
-  if (!existsSync(filePath)) {
-    return { valid: false, error: "File does not exist" };
-  }
-
-  const stats = statSync(filePath);
-  if (stats.size === 0) {
-    return { valid: false, error: "File is empty" };
-  }
-
-  try {
-    const proc = spawn({
-      cmd: ["node", "--check", filePath],
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stderr = await new Response(proc.stderr).text();
-    const exitCode = await proc.exited;
-    if (exitCode !== 0) {
-      return { valid: false, error: stderr.trim() || `node --check exited ${exitCode}` };
-    }
-    return { valid: true };
-  } catch (err) {
-    return { valid: false, error: String(err) };
   }
 }
 

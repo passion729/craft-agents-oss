@@ -6,6 +6,7 @@
 import { spawn } from "bun";
 import { existsSync, readFileSync, statSync, mkdirSync, copyFileSync, chmodSync } from "fs";
 import { join } from "path";
+import { verifyJsFile } from "./build/verify-js";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const DIST_DIR = join(ROOT_DIR, "apps/electron/dist");
@@ -97,33 +98,6 @@ async function waitForFileStable(filePath: string, timeoutMs = 10000): Promise<b
   }
 
   return false;
-}
-
-// Verify a JavaScript file is syntactically valid
-async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?: string }> {
-  if (!existsSync(filePath)) {
-    return { valid: false, error: "File does not exist" };
-  }
-
-  const stats = statSync(filePath);
-  if (stats.size === 0) {
-    return { valid: false, error: "File is empty" };
-  }
-
-  const proc = spawn({
-    cmd: ["node", "--check", filePath],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const stderr = await new Response(proc.stderr).text();
-  const exitCode = await proc.exited;
-
-  if (exitCode !== 0) {
-    return { valid: false, error: stderr || "Syntax error" };
-  }
-
-  return { valid: true };
 }
 
 // Verify Session Tools Core package exists (raw TypeScript, bundled by consumers)
