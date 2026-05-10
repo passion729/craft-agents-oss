@@ -12,7 +12,7 @@ const baseCompat: LlmConnection = {
   baseUrl: 'http://127.0.0.1:1234/v1',
   defaultModel: 'gemma',
   piAuthProvider: 'openai',
-  customEndpoint: { api: 'openai-completions', supportsImages: true },
+  customEndpoint: { api: 'openai-responses', supportsImages: true },
   models: [{ id: 'gemma', supportsImages: true } as never],
 }
 
@@ -81,7 +81,7 @@ describe('filterAttachmentsForModelInput', () => {
   it('treats explicit supportsImages=false as overriding endpoint-level true', () => {
     const result = filterAttachmentsForModelInput(
       [imageAttachment],
-      { ...baseCompat, customEndpoint: { api: 'openai-completions', supportsImages: true }, models: [{ id: 'gemma', supportsImages: false } as never] },
+      { ...baseCompat, customEndpoint: { api: 'openai-responses', supportsImages: true }, models: [{ id: 'gemma', supportsImages: false } as never] },
       'gemma',
     )
 

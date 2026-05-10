@@ -7,7 +7,7 @@ const BASE_COMPAT: LlmConnection = {
   providerType: 'pi_compat',
   authType: 'api_key_with_endpoint',
   baseUrl: 'http://localhost:8080',
-  customEndpoint: { api: 'openai-completions' },
+  customEndpoint: { api: 'openai-responses' },
   createdAt: 1,
 }
 
@@ -15,7 +15,7 @@ describe('modelSupportsImages — pi_compat precedence', () => {
   it('returns true when per-model supportsImages: true (override wins over connection default)', () => {
     const conn: LlmConnection = {
       ...BASE_COMPAT,
-      customEndpoint: { api: 'openai-completions', supportsImages: false },
+      customEndpoint: { api: 'openai-responses', supportsImages: false },
       models: [{ id: 'vision', supportsImages: true } as never],
     }
     expect(modelSupportsImages(conn, 'vision')).toBe(true)
@@ -24,7 +24,7 @@ describe('modelSupportsImages — pi_compat precedence', () => {
   it('returns false when per-model supportsImages: false (override wins over connection default true)', () => {
     const conn: LlmConnection = {
       ...BASE_COMPAT,
-      customEndpoint: { api: 'openai-completions', supportsImages: true },
+      customEndpoint: { api: 'openai-responses', supportsImages: true },
       models: [{ id: 'text-only', supportsImages: false } as never],
     }
     expect(modelSupportsImages(conn, 'text-only')).toBe(false)
@@ -33,7 +33,7 @@ describe('modelSupportsImages — pi_compat precedence', () => {
   it('falls back to connection-level supportsImages when no per-model override', () => {
     const conn: LlmConnection = {
       ...BASE_COMPAT,
-      customEndpoint: { api: 'openai-completions', supportsImages: true },
+      customEndpoint: { api: 'openai-responses', supportsImages: true },
       models: ['plain'],
     }
     expect(modelSupportsImages(conn, 'plain')).toBe(true)
@@ -52,7 +52,7 @@ describe('modelSupportsImages — pi_compat precedence', () => {
   it('returns connection default when the model is missing but connection default is true', () => {
     const conn: LlmConnection = {
       ...BASE_COMPAT,
-      customEndpoint: { api: 'openai-completions', supportsImages: true },
+      customEndpoint: { api: 'openai-responses', supportsImages: true },
       models: ['plain'],
     }
     expect(modelSupportsImages(conn, 'unknown')).toBe(true)

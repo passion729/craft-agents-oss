@@ -10,7 +10,7 @@ const BASE: LlmConnection = {
   providerType: 'pi_compat',
   authType: 'api_key_with_endpoint',
   baseUrl: 'http://localhost:8080',
-  customEndpoint: { api: 'openai-completions' },
+  customEndpoint: { api: 'openai-responses' },
   createdAt: 1,
 }
 

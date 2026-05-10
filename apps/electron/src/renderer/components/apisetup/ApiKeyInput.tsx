@@ -84,6 +84,10 @@ export interface ApiKeyInputProps {
   }
 }
 
+function normalizeCustomApi(api?: CustomEndpointApi): CustomEndpointApi {
+  return api === 'openai-completions' ? 'openai-responses' : (api ?? 'openai-responses')
+}
+
 interface Preset {
   key: PresetKey
   label: string
@@ -194,7 +198,7 @@ export function ApiKeyInput({
     initialPreset !== 'custom' ? initialPreset : defaultPreset.key
   )
   const [connectionDefaultModel, setConnectionDefaultModel] = useState(initialValues?.connectionDefaultModel ?? '')
-  const [customApi, setCustomApi] = useState<CustomEndpointApi>(initialValues?.customApi ?? 'openai-completions')
+  const [customApi, setCustomApi] = useState<CustomEndpointApi>(normalizeCustomApi(initialValues?.customApi))
   const [customUserAgent, setCustomUserAgent] = useState(initialValues?.customUserAgent ?? '')
   const [modelError, setModelError] = useState<string | null>(null)
 
@@ -513,7 +517,7 @@ export function ApiKeyInput({
             isDisabled && "opacity-50 pointer-events-none"
           )}>
             {([
-              { value: 'openai-completions' as const, label: 'OpenAI Compatible' },
+              { value: 'openai-responses' as const, label: 'OpenAI Responses' },
               { value: 'anthropic-messages' as const, label: 'Anthropic Compatible' },
             ]).map(({ value, label }) => (
               <button
@@ -533,7 +537,7 @@ export function ApiKeyInput({
             ))}
           </div>
           <p className="text-xs text-foreground/30">
-            Most third-party APIs (Ollama, vLLM, DashScope) use OpenAI Compatible.
+            OpenAI protocol uses the Responses API.
           </p>
           <div className="space-y-1.5 pt-1.5">
             <Label htmlFor="custom-user-agent" className="text-muted-foreground font-normal text-xs">

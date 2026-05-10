@@ -28,7 +28,7 @@ function withPiAuth(
 }
 
 describe('resolveSearchProvider', () => {
-  // --- Custom endpoint (OpenAI-compatible) ---
+  // --- Custom endpoint (OpenAI Responses) ---
 
   it('honors explicit DuckDuckGo provider preference', () => {
     const provider = resolveSearchProvider({
@@ -73,12 +73,26 @@ describe('resolveSearchProvider', () => {
         credential: { type: 'api_key', key: 'sk-proxy' },
       },
       baseUrl: 'https://proxy.example.com/v1/',
-      customEndpoint: { api: 'openai-completions' },
+      customEndpoint: { api: 'openai-responses' },
     });
 
     expect(provider).toBeInstanceOf(ResponsesApiSearchProvider);
     expect((provider as any).config.apiBase).toBe('https://proxy.example.com/v1');
     expect((provider as any).config.model).toBeUndefined();
+  });
+
+  it('selects ResponsesApiSearchProvider for custom responses endpoint + api_key', () => {
+    const provider = resolveSearchProvider({
+      piAuth: {
+        provider: 'openai',
+        credential: { type: 'api_key', key: 'sk-proxy' },
+      },
+      baseUrl: 'https://proxy.example.com/v1/',
+      customEndpoint: { api: 'openai-responses' },
+    });
+
+    expect(provider).toBeInstanceOf(ResponsesApiSearchProvider);
+    expect((provider as any).config.apiBase).toBe('https://proxy.example.com/v1');
   });
 
   it('uses connection model for custom openai endpoint and strips pi/ prefix', () => {
@@ -89,7 +103,7 @@ describe('resolveSearchProvider', () => {
       },
       baseUrl: 'https://proxy.example.com/v1/',
       model: 'pi/gpt-4.1-mini',
-      customEndpoint: { api: 'openai-completions' },
+      customEndpoint: { api: 'openai-responses' },
     });
 
     expect(provider).toBeInstanceOf(ResponsesApiSearchProvider);
@@ -103,7 +117,7 @@ describe('resolveSearchProvider', () => {
         credential: { type: 'api_key', key: 'sk-proxy' },
       },
       baseUrl: 'https://my-openai-proxy.internal/v1',
-      customEndpoint: { api: 'openai-completions' },
+      customEndpoint: { api: 'openai-responses' },
     });
 
     expect(provider).toBeInstanceOf(ResponsesApiSearchProvider);
@@ -142,7 +156,7 @@ describe('resolveSearchProvider', () => {
         provider: 'openai',
         credential: { type: 'api_key', key: 'sk-proxy' },
       },
-      customEndpoint: { api: 'openai-completions' },
+      customEndpoint: { api: 'openai-responses' },
     });
 
     expect(provider).toBeInstanceOf(DDGSearchProvider);
@@ -160,7 +174,7 @@ describe('resolveSearchProvider', () => {
         },
       },
       baseUrl: 'https://proxy.example.com/v1',
-      customEndpoint: { api: 'openai-completions' },
+      customEndpoint: { api: 'openai-responses' },
     });
 
     expect(provider).toBeInstanceOf(DDGSearchProvider);

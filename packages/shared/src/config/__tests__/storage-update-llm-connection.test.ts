@@ -91,7 +91,7 @@ describe('updateLlmConnection – customEndpoint', () => {
   })
 
   it('preserves existing customEndpoint when updates do not include it', () => {
-    const customEndpoint = { api: 'openai-completions' }
+    const customEndpoint = { api: 'openai-responses' }
     const { runUpdate, readConnection } = setup([makeConnection({ customEndpoint })])
 
     // Update an unrelated field
@@ -105,7 +105,7 @@ describe('updateLlmConnection – customEndpoint', () => {
 
   it('overwrites customEndpoint protocol when updated', () => {
     const { runUpdate, readConnection } = setup([
-      makeConnection({ customEndpoint: { api: 'openai-completions' } }),
+      makeConnection({ customEndpoint: { api: 'openai-responses' } }),
     ])
 
     const ok = runUpdate('custom-compat', { customEndpoint: { api: 'anthropic-messages' } })

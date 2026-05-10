@@ -61,6 +61,7 @@ import { pickProviderAppropriateMiniModel } from './pick-mini-model.ts';
 import {
   buildCustomEndpointModelDef,
   normalizeCustomEndpointModelEntry,
+  normalizeCustomEndpointApi,
   stripPiPrefix,
   type CustomEndpointModelEntry,
   type CustomEndpointModelOverrides,
@@ -90,7 +91,7 @@ type PiCredential =
   | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string };
 
 /** Custom endpoint protocol — determines which streaming adapter Pi SDK uses */
-type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
+type CustomEndpointApi = 'openai-completions' | 'openai-responses' | 'anthropic-messages';
 
 /** Init message from main process — configures the Pi agent server */
 interface InitMessage {
@@ -444,6 +445,7 @@ function registerCustomEndpointModels(
   baseUrl: string,
   models: CustomEndpointModelEntry[],
 ): void {
+  const normalizedApi = normalizeCustomEndpointApi(api);
   for (const m of models) {
     customEndpointModelIds.add(m.id);
     if (m.contextWindow || m.supportsImages !== undefined) {
@@ -458,17 +460,17 @@ function registerCustomEndpointModels(
   registry.registerProvider('custom-endpoint', {
     baseUrl,
     apiKey: resolveCustomEndpointApiKey(),
-    api,
+    api: normalizedApi,
     authHeader: true,
     ...(userAgent ? { headers: { 'User-Agent': userAgent } } : {}),
     models: allIds.map(id => buildCustomEndpointModelDef(
       id,
       { supportsImages: initConfig?.customEndpoint?.supportsImages !== false },
       customModelOverrides.get(id),
-      api,
+      normalizedApi,
     )),
   });
-  debugLog(`Registered custom endpoint: ${baseUrl} with ${allIds.length} model(s) [${allIds.join(', ')}], api: ${api}`);
+  debugLog(`Registered custom endpoint: ${baseUrl} with ${allIds.length} model(s) [${allIds.join(', ')}], api: ${normalizedApi}`);
 }
 
 /**

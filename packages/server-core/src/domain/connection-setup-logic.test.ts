@@ -53,7 +53,7 @@ describe('resolveCustomEndpointSetup', () => {
     const result = resolveCustomEndpointSetup({
       baseUrl: 'http://localhost:11434/v1',
       credential: undefined,
-      customEndpointApi: 'openai-completions',
+      customEndpointApi: 'openai-responses',
     })
 
     expect(result).toEqual({ authType: 'none', name: 'Local Model' })
@@ -66,7 +66,7 @@ describe('resolveCustomEndpointSetup', () => {
     const result = resolveCustomEndpointSetup({
       baseUrl: 'http://127.0.0.1:11111/v1',
       credential: 'sk-local-test',
-      customEndpointApi: 'openai-completions',
+      customEndpointApi: 'openai-responses',
     })
 
     expect(result).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
@@ -87,7 +87,7 @@ describe('resolveCustomEndpointSetup', () => {
     expect(resolveCustomEndpointSetup({
       baseUrl: 'https://api.example.com/v1',
       credential: 'sk-remote',
-      customEndpointApi: 'openai-completions',
+      customEndpointApi: 'openai-responses',
     })).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
   })
 
@@ -98,7 +98,7 @@ describe('resolveCustomEndpointSetup', () => {
     expect(resolveCustomEndpointSetup({
       baseUrl: 'https://api.example.com/v1',
       credential: undefined,
-      customEndpointApi: 'openai-completions',
+      customEndpointApi: 'openai-responses',
     })).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
   })
 
@@ -106,7 +106,7 @@ describe('resolveCustomEndpointSetup', () => {
     expect(resolveCustomEndpointSetup({
       baseUrl: undefined,
       credential: 'sk-anything',
-      customEndpointApi: 'openai-completions',
+      customEndpointApi: 'openai-responses',
     })).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
   })
 })

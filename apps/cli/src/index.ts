@@ -578,7 +578,7 @@ async function setupLlmConnection(
     authType = 'api_key_with_endpoint'
     setupPayload.baseUrl = baseUrl
     setupPayload.customEndpoint = {
-      api: provider === 'anthropic' ? 'anthropic-messages' : 'openai-completions',
+      api: provider === 'anthropic' ? 'anthropic-messages' : 'openai-responses',
     }
     setupPayload.defaultModel = provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o'
   } else if (provider === 'anthropic') {
@@ -1095,7 +1095,7 @@ export function getValidateSteps(): ValidateStep[] {
             slug,
             credential: key,
             baseUrl: ctx.baseUrl,
-            customEndpoint: { api: isAnthropicApi ? 'anthropic-messages' : 'openai-completions' },
+            customEndpoint: { api: isAnthropicApi ? 'anthropic-messages' : 'openai-responses' },
             defaultModel: isAnthropicApi ? 'claude-sonnet-4-6' : 'gpt-4o',
           }) as { success: boolean; error?: string }
           if (!result?.success) return `setup failed: ${result?.error ?? 'unknown'}`

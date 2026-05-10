@@ -280,8 +280,8 @@ describe('phase4 backend abstraction APIs', () => {
     expect(resolveSetupTestConnectionHint({
       provider: 'pi',
       baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      customEndpoint: { api: 'openai-completions' },
-    })).toEqual({ providerType: 'pi_compat', piAuthProvider: 'openai', customEndpoint: { api: 'openai-completions' } });
+      customEndpoint: { api: 'openai-responses' },
+    })).toEqual({ providerType: 'pi_compat', piAuthProvider: 'openai', customEndpoint: { api: 'openai-responses' } });
 
     expect(resolveSetupTestConnectionHint({
       provider: 'pi',
@@ -292,11 +292,11 @@ describe('phase4 backend abstraction APIs', () => {
     expect(resolveSetupTestConnectionHint({
       provider: 'pi',
       baseUrl: 'https://proxy.example.com/v1',
-      customEndpoint: { api: 'openai-completions', userAgent: 'MyAgent/1.0' },
+      customEndpoint: { api: 'openai-responses', userAgent: 'MyAgent/1.0' },
     })).toEqual({
       providerType: 'pi_compat',
       piAuthProvider: 'openai',
-      customEndpoint: { api: 'openai-completions', userAgent: 'MyAgent/1.0' },
+      customEndpoint: { api: 'openai-responses', userAgent: 'MyAgent/1.0' },
     });
   });
 

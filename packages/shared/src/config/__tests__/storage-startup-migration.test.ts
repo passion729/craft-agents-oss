@@ -255,7 +255,7 @@ describe('startup migration (integration)', () => {
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
-        name: 'Custom OpenAI-Compatible',
+        name: 'Custom OpenAI Responses',
         providerType: 'pi_compat',
         authType: 'api_key_with_endpoint',
         piAuthProvider: 'openai',
@@ -271,7 +271,32 @@ describe('startup migration (integration)', () => {
     const connection = readPiApiKeyConnection(configPath)
     expect(connection).toBeDefined()
     expect(connection.providerType).toBe('pi_compat')
-    expect(connection.customEndpoint).toEqual({ api: 'openai-completions' })
+    expect(connection.customEndpoint).toEqual({ api: 'openai-responses' })
+  })
+
+  it('backfills official OpenAI pi_compat endpoints as Responses API', () => {
+    const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
+
+    writeRootConfig(configPath, workspaceRoot, [
+      {
+        slug: 'openai-api',
+        name: 'OpenAI API',
+        providerType: 'pi_compat',
+        authType: 'api_key_with_endpoint',
+        piAuthProvider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        createdAt: Date.now(),
+        models: ['pi/gpt-5.4'],
+        defaultModel: 'pi/gpt-5.4',
+      },
+    ])
+
+    runMigration(configDir)
+
+    const connection = findConnection(configPath, 'openai-api')
+    expect(connection).toBeDefined()
+    expect(connection.providerType).toBe('pi_compat')
+    expect(connection.customEndpoint).toEqual({ api: 'openai-responses' })
   })
 })
 

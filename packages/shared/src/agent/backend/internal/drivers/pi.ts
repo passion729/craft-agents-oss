@@ -241,14 +241,14 @@ function inferCustomEndpoint(
     return { api: 'anthropic-messages' };
   }
   if (connection.piAuthProvider === 'openai') {
-    return { api: 'openai-completions' };
+    return { api: 'openai-responses' };
   }
 
   const hasClaudeModel = [connection.defaultModel, ...(connection.models ?? []).map(m => typeof m === 'string' ? m : m.id)]
     .filter((id): id is string => typeof id === 'string' && id.length > 0)
     .some(id => id.replace(/^pi\//, '').toLowerCase().includes('claude'));
 
-  return { api: hasClaudeModel ? 'anthropic-messages' : 'openai-completions' };
+  return { api: hasClaudeModel ? 'anthropic-messages' : 'openai-responses' };
 }
 
 export const piDriver: ProviderDriver = {

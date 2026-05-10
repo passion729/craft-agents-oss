@@ -1992,9 +1992,9 @@ function migrateWorkspaceOpus45ToOpus46(config: StoredConfig): void {
   }
 }
 
-function inferCompatEndpointApi(connection: Pick<LlmConnection, 'piAuthProvider' | 'defaultModel' | 'models'>): CustomEndpointApi {
+function inferCompatEndpointApi(connection: Pick<LlmConnection, 'baseUrl' | 'piAuthProvider' | 'defaultModel' | 'models'>): CustomEndpointApi {
   if (connection.piAuthProvider === 'anthropic') return 'anthropic-messages';
-  if (connection.piAuthProvider === 'openai') return 'openai-completions';
+  if (connection.piAuthProvider === 'openai') return 'openai-responses';
 
   const toBareModelId = (id: string): string => id.startsWith('pi/') ? id.slice(3) : id;
   const ids = [
@@ -2005,7 +2005,7 @@ function inferCompatEndpointApi(connection: Pick<LlmConnection, 'piAuthProvider'
 
   return ids.some(id => id.toLowerCase().includes('claude'))
     ? 'anthropic-messages'
-    : 'openai-completions';
+    : 'openai-responses';
 }
 
 /**
@@ -2075,6 +2075,17 @@ function migrateLegacyProviderTypes(config: StoredConfig): boolean {
       connection.customEndpoint = { api: inferCompatEndpointApi(connection) };
       changed = true;
       continue;
+    }
+
+    // Forward: OpenAI-compatible custom endpoints now use the Responses API.
+    // Normalize existing saved configs so runtime registration no longer
+    // selects Pi's Chat Completions provider.
+    if (connection.customEndpoint?.api === 'openai-completions') {
+      connection.customEndpoint = {
+        ...connection.customEndpoint,
+        api: 'openai-responses',
+      };
+      changed = true;
     }
 
     // Forward: Pi+Bedrock connections need Bedrock-native IDs (pi-prefixed) for Pi SDK resolution
@@ -2589,8 +2600,12 @@ export function addLlmConnection(connection: LlmConnection): boolean {
   }
 
   // Add connection with timestamp
+  const customEndpoint = connection.customEndpoint?.api === 'openai-completions'
+    ? { ...connection.customEndpoint, api: 'openai-responses' as const }
+    : connection.customEndpoint;
   config.llmConnections.push({
     ...connection,
+    customEndpoint,
     createdAt: connection.createdAt || Date.now(),
   });
 
@@ -2623,6 +2638,12 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
   const existing = connections[index]!;
   const toModelIds = (models?: Array<{ id: string } | string>): string[] =>
     (models ?? []).map(m => typeof m === 'string' ? m : m.id);
+  const customEndpoint = updates.customEndpoint !== undefined
+    ? updates.customEndpoint
+    : existing.customEndpoint;
+  const normalizedCustomEndpoint = customEndpoint?.api === 'openai-completions'
+    ? { ...customEndpoint, api: 'openai-responses' as const }
+    : customEndpoint;
 
   connections[index] = {
     // Preserve required fields from existing
@@ -2640,7 +2661,7 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     // Pi auth provider
     piAuthProvider: updates.piAuthProvider !== undefined ? updates.piAuthProvider : existing.piAuthProvider,
     // Custom endpoint protocol (Anthropic/OpenAI compatible)
-    customEndpoint: updates.customEndpoint !== undefined ? updates.customEndpoint : existing.customEndpoint,
+    customEndpoint: normalizedCustomEndpoint,
     // Mid-stream send behavior (steer vs queue) — read via resolveMidStreamBehavior()
     midStreamBehavior: updates.midStreamBehavior !== undefined ? updates.midStreamBehavior : existing.midStreamBehavior,
     // Timestamps

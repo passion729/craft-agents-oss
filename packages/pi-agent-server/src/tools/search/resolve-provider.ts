@@ -95,7 +95,7 @@ export function resolveSearchProvider(context?: SearchProviderRuntimeContext): W
 
   // Custom OpenAI-compatible endpoint must use the configured base URL,
   // never hardcode api.openai.com with a third-party key.
-  if (customEndpointApi === 'openai-completions') {
+  if (customEndpointApi === 'openai-completions' || customEndpointApi === 'openai-responses') {
     if (customBaseUrl && apiKey) {
       return new ResponsesApiSearchProvider({
         apiBase: normalizeBaseUrl(customBaseUrl),
