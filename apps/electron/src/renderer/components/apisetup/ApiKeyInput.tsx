@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 import { Check, ChevronDown, Eye, EyeOff, Loader2 } from "lucide-react"
 import { pickTierDefaults, resolveTierModels, type PiModelInfo } from "./tier-models"
 import {
+  resolveCustomEndpointPayload,
   resolvePiAuthProviderForSubmit,
   resolvePresetStateForBaseUrlChange,
   type PresetKey,
@@ -117,8 +118,16 @@ const ANTHROPIC_PRESETS: Preset[] = [
   { key: 'minimax-cn', label: 'Minimax CN', url: 'https://api.minimaxi.com/anthropic', placeholder: 'Paste your key here...' },
   { key: 'kimi-coding', label: 'Kimi (Coding)', url: 'https://api.kimi.com/coding', placeholder: 'sk-kimi-...' },
   { key: 'vercel-ai-gateway', label: 'Vercel AI Gateway', url: 'https://ai-gateway.vercel.sh', placeholder: 'Paste your key here...' },
+  { key: 'manifest', label: 'Manifest', url: 'https://app.manifest.build/v1', placeholder: 'mnfst_...' },
   { key: 'custom', label: 'Custom', url: '', placeholder: 'Paste your key here...' },
 ]
+
+/**
+ * Presets without a Pi SDK provider entry that nonetheless expose a known
+ * OpenAI-compatible protocol. They behave like 'custom' on submit (customEndpoint
+ * gets pinned to openai-completions) but stay branded in the dropdown.
+ */
+const OPENAI_COMPAT_CUSTOM_URL_PRESETS: ReadonlySet<string> = new Set(['manifest'])
 
 // OpenAI provider presets - for Codex backend
 // Only direct OpenAI is supported; 3PP providers (OpenRouter, Vercel, Ollama) should be
@@ -240,7 +249,7 @@ export function ApiKeyInput({
   // Fetch Pi SDK models when a provider is selected in pi_api_key flow.
   // Returns all models sorted by cost (expensive-first) for the searchable tier dropdowns.
   const loadPiModels = useCallback(async (provider: string) => {
-    if (!isPiApiKeyFlow || !provider || provider === 'custom' || DEFAULT_ENDPOINT_PROVIDERS.has(provider)) {
+    if (!isPiApiKeyFlow || !provider || provider === 'custom' || DEFAULT_ENDPOINT_PROVIDERS.has(provider) || OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(provider)) {
       setPiModels([])
       return
     }
@@ -292,7 +301,9 @@ export function ApiKeyInput({
       setConnectionDefaultModel(COMPAT_MINIMAX_DEFAULTS)
     } else if (preset.key === 'kimi-coding') {
       setConnectionDefaultModel(COMPAT_KIMI_DEFAULTS)
-    } else if (preset.key === 'custom') {
+    } else if (preset.key === 'manifest') {
+      setConnectionDefaultModel('auto')
+    } else if (preset.key === 'custom' || OPENAI_COMPAT_CUSTOM_URL_PRESETS.has(preset.key)) {
       setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
     } else {
       setConnectionDefaultModel('')
@@ -315,6 +326,8 @@ export function ApiKeyInput({
     if (!connectionDefaultModel.trim()) {
       if (presetKey === 'ollama') {
         setConnectionDefaultModel('qwen3-coder')
+      } else if (presetKey === 'manifest') {
+        setConnectionDefaultModel('auto')
       } else if (presetKey === 'minimax-global' || presetKey === 'minimax-cn') {
         setConnectionDefaultModel(COMPAT_MINIMAX_DEFAULTS)
       } else if (presetKey === 'kimi-coding') {
@@ -391,17 +404,19 @@ export function ApiKeyInput({
       return
     }
 
-    // Include custom endpoint protocol when user configured a custom base URL
-    const isCustomEndpoint = activePreset === 'custom' && !!effectiveBaseUrl
-    const customEndpoint = isCustomEndpoint
-      ? {
-        api: customApi,
-        ...(customUserAgent.trim() ? { userAgent: customUserAgent.trim() } : {}),
-      }
-      : undefined
-    const resolvedPiAuthProvider = isCustomEndpoint
-      ? (customApi === 'anthropic-messages' ? 'anthropic' : 'openai')
-      : effectivePiAuthProvider
+    // Include custom endpoint protocol when user configured a custom base URL.
+    // Branded openai-compat presets (e.g. Manifest) are pinned to openai-completions
+    // and routed via the Pi SDK's openai adapter.
+    const { customEndpoint: resolvedCustomEndpoint, piAuthProvider: resolvedPiAuthProvider } = resolveCustomEndpointPayload({
+      activePreset,
+      baseUrl: effectiveBaseUrl,
+      customApi,
+      brandedOpenAiCompatPresets: OPENAI_COMPAT_CUSTOM_URL_PRESETS,
+      fallbackPiAuthProvider: effectivePiAuthProvider,
+    })
+    const customEndpoint = resolvedCustomEndpoint && activePreset === 'custom' && customUserAgent.trim()
+      ? { ...resolvedCustomEndpoint, userAgent: customUserAgent.trim() }
+      : resolvedCustomEndpoint
 
     onSubmit({
       apiKey: apiKey.trim(),
