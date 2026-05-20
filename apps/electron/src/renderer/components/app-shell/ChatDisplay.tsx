@@ -235,9 +235,15 @@ interface ChatDisplayProps {
   isSearchModeActive?: boolean
   /** Callback when match info changes - for immediate UI updates */
   onMatchInfoChange?: (info: { count: number; index: number; isHighlighting: boolean; sessionId: string | null }) => void
-  // Compact mode (for EditPopover embedding)
+  // Compact mode (for EditPopover embedding and auto-compact / WebUI mobile)
   /** Enable compact mode - hides non-essential UI elements for popover embedding */
   compactMode?: boolean
+  /**
+   * When compactMode is true, enable the compact (drawer-based) model selector
+   * next to the permission-mode pill. Defaults to false so EditPopover keeps
+   * its current behavior; ChatPage opts in when in auto-compact / mobile.
+   */
+  enableCompactModelPicker?: boolean
   /** Custom placeholder for input (used in compact mode for edit context) */
   placeholder?: string | string[]
   /** Label shown as empty state in compact mode (e.g., "Permission Settings") */
@@ -493,8 +499,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   searchQuery: externalSearchQuery,
   isSearchModeActive = false,
   onMatchInfoChange,
-  // Compact mode (for EditPopover embedding)
+  // Compact mode (for EditPopover embedding and auto-compact / WebUI mobile)
   compactMode = false,
+  enableCompactModelPicker = false,
   placeholder,
   emptyStateLabel,
   // Connection unavailable
@@ -672,7 +679,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     if (!searchQuery.trim() || !session?.messages) return []
     const startTime = performance.now()
     const query = searchQuery.toLowerCase()
-    const turns = groupMessagesByTurn(session.messages)
+    const turns = groupMessagesByTurn(session.messages, { isSessionProcessing: session.isProcessing })
     const matches: { matchId: string; turnId: string; turnIndex: number; matchIndexInTurn: number }[] = []
 
     for (let turnIndex = 0; turnIndex < turns.length; turnIndex++) {
@@ -713,7 +720,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       }
     }
     return matches
-  }, [searchQuery, session?.messages, countOccurrences])
+  }, [searchQuery, session?.messages, session?.isProcessing, countOccurrences])
 
   // Auto-expand pagination when search is active to show all matching turns
   // This ensures match count is stable and all matches are highlightable from the start
@@ -725,7 +732,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       (min, m) => m.turnIndex < min ? m.turnIndex : min,
       matchingOccurrences[0]!.turnIndex
     )
-    const totalTurns = groupMessagesByTurn(session?.messages || []).length
+    const totalTurns = groupMessagesByTurn(session?.messages || [], { isSessionProcessing: session?.isProcessing }).length
 
     // Calculate how many turns we need to show to include all matches
     // totalTurns - visibleTurnCount = startIndex, so we need visibleTurnCount = totalTurns - earliestMatchTurnIndex + buffer
@@ -734,7 +741,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     if (requiredVisibleCount > visibleTurnCount) {
       setVisibleTurnCount(requiredVisibleCount)
     }
-  }, [isSearchActive, matchingOccurrences, session?.messages, visibleTurnCount])
+  }, [isSearchActive, matchingOccurrences, session?.messages, session?.isProcessing, visibleTurnCount])
 
   // Extract unique turn IDs that have matches (for highlighting)
   const matchingTurnIds = useMemo(() => {
@@ -1418,8 +1425,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
   const allTurns = React.useMemo(() => {
     if (!session) return []
-    return groupMessagesByTurn(session.messages)
-  }, [session?.messages])
+    return groupMessagesByTurn(session.messages, { isSessionProcessing: session.isProcessing })
+  }, [session?.messages, session?.isProcessing])
 
   // Reset runtime-only strategy markers when switching sessions.
   useEffect(() => {
@@ -2066,6 +2073,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               thinkingLevel,
               onThinkingLevelChange,
               enabledModes,
+              enableCompactModelPicker,
               structuredInput,
               onStructuredResponse: handleStructuredResponse,
               inputValue,
