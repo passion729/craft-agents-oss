@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { Command as CommandPrimitive } from 'cmdk'
 import { AnimatePresence, motion } from 'motion/react'
+import { toast } from 'sonner'
 import {
   Paperclip,
   ArrowUp,
@@ -1619,7 +1620,7 @@ export function FreeFormInput({
 
   const webSearchProviderLabel = getWebSearchProviderLabel(webSearchProvider)
 
-  const renderWebSearchProviderBadge = (isExpanded: boolean) => (
+  const renderWebSearchProviderBadge = () => (
     <DropdownMenu open={webSearchDropdownOpen} onOpenChange={setWebSearchDropdownOpen}>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -1627,9 +1628,9 @@ export function FreeFormInput({
             <FreeFormInputContextBadge
               icon={<Globe className="h-4 w-4" />}
               label={webSearchProviderLabel}
-              isExpanded={isExpanded}
+              isExpanded={false}
               hasSelection={webSearchProvider !== 'api-native'}
-              showChevron={isExpanded}
+              showChevron={false}
               isOpen={webSearchDropdownOpen}
               disabled={disabled}
             />
@@ -1924,6 +1925,10 @@ export function FreeFormInput({
           <FreeFormInputContextBadge
             icon={<Paperclip className="h-4 w-4" />}
             label={attachments.length > 0
+              ? String(attachments.length)
+              : t("chat.attach")
+            }
+            aria-label={attachments.length > 0
               ? t("chat.filesCount", { count: attachments.length })
               : t("chat.attach")
             }
@@ -1934,7 +1939,7 @@ export function FreeFormInput({
             tooltip={t("chat.attachFilesTooltip")}
             disabled={disabled}
           />
-          {renderWebSearchProviderBadge(false)}
+          {renderWebSearchProviderBadge()}
           {onSourcesChange && (
             <div className="relative shrink min-w-0">
               <FreeFormInputContextBadge
@@ -2011,31 +2016,34 @@ export function FreeFormInput({
               workingDirectory={workingDirectory}
               onWorkingDirectoryChange={onWorkingDirectoryChange}
               sessionFolderPath={sessionFolderPath}
-              isEmptySession={false}
               workspaceId={workspaceId}
             />
           )}
           </>
           )}
 
-          {/* Desktop: full badges row with labels and working directory */}
+          {/* Desktop: icon badge row with tooltip-backed context controls */}
           {!compactMode && (
           <div className="flex items-center gap-1 min-w-32 shrink overflow-hidden">
           {/* 1. Attach Files Badge */}
           <FreeFormInputContextBadge
             icon={<Paperclip className="h-4 w-4" />}
             label={attachments.length > 0
+              ? String(attachments.length)
+              : t("chat.attachFiles")
+            }
+            aria-label={attachments.length > 0
               ? t("chat.filesCount", { count: attachments.length })
               : t("chat.attachFiles")
             }
-            isExpanded={isEmptySession}
+            isExpanded={false}
             hasSelection={attachments.length > 0}
             showChevron={false}
             onClick={handleAttachClick}
             tooltip={t("chat.attachFilesTooltip")}
             disabled={disabled}
           />
-          {renderWebSearchProviderBadge(isEmptySession)}
+          {renderWebSearchProviderBadge()}
 
           {/* 2. Source Selector Badge - only show if onSourcesChange is provided */}
           {onSourcesChange && (
@@ -2086,9 +2094,10 @@ export function FreeFormInput({
                         return t("chat.sourcesCount", { count: enabledSources.length })
                       })()
                 }
-                isExpanded={isEmptySession}
+                isExpanded={false}
                 hasSelection={optimisticSourceSlugs.length > 0}
-                showChevron={true}
+                showSelectionLabel={false}
+                showChevron={false}
                 isOpen={sourceDropdownOpen}
                 disabled={disabled}
                 data-tutorial="source-selector-button"
@@ -2120,7 +2129,6 @@ export function FreeFormInput({
               workingDirectory={workingDirectory}
               onWorkingDirectoryChange={onWorkingDirectoryChange}
               sessionFolderPath={sessionFolderPath}
-              isEmptySession={isEmptySession}
               workspaceId={workspaceId}
             />
           )}
@@ -2607,13 +2615,11 @@ function WorkingDirectoryBadge({
   workingDirectory,
   onWorkingDirectoryChange,
   sessionFolderPath,
-  isEmptySession = false,
   workspaceId,
 }: {
   workingDirectory?: string
   onWorkingDirectoryChange: (path: string) => void
   sessionFolderPath?: string
-  isEmptySession?: boolean
   workspaceId?: string
 }) {
   const { t } = useTranslation()
@@ -2674,9 +2680,9 @@ function WorkingDirectoryBadge({
           <FreeFormInputContextBadge
             icon={<Icon_Home className="h-4 w-4" />}
             label={folderName ?? 'Work in Folder'}
-            isExpanded={isEmptySession}
+            isExpanded={false}
             hasSelection={hasFolder}
-            showChevron={true}
+            showChevron={false}
             isOpen={popoverOpen}
             tooltip={
               hasFolder ? (

@@ -7,12 +7,14 @@ import { cn } from '@/lib/utils'
 export interface FreeFormInputContextBadgeProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   /** Left area - fully customizable (icon, avatar stack, etc.) */
   icon: React.ReactNode
-  /** Label text - shown in expanded state or collapsed with selection */
+  /** Label text - used for aria-label, tooltip context, and optional expanded/selection display */
   label: string
   /** Whether to show expanded state (icon + label + chevron) vs collapsed */
   isExpanded?: boolean
-  /** Whether there's an active selection (affects collapsed state styling and shows label) */
+  /** Whether there's an active selection (affects collapsed state styling) */
   hasSelection?: boolean
+  /** Whether to show label text when collapsed with a selection */
+  showSelectionLabel?: boolean
   /** Show chevron indicator (for dropdowns) - only visible in expanded state */
   showChevron?: boolean
   /** Tooltip content - can be string or ReactNode for rich content */
@@ -35,7 +37,7 @@ export interface FreeFormInputContextBadgeProps extends Omit<React.ButtonHTMLAtt
  * Visual States:
  * - Expanded: Icon + Label + Chevron, no background, hover shows background
  * - Collapsed (no selection): Icon only, no background, hover shows background
- * - Collapsed (has selection): Icon + Label (fading), bg-background + shadow-minimal
+ * - Collapsed (has selection): Icon + optional Label (fading), bg-background + shadow-minimal
  * - Open: bg-foreground/5 (like hover)
  */
 export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, FreeFormInputContextBadgeProps>(
@@ -45,6 +47,7 @@ export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, Fre
       label,
       isExpanded = false,
       hasSelection = false,
+      showSelectionLabel = true,
       showChevron = false,
       onClick,
       tooltip,
@@ -60,8 +63,8 @@ export const FreeFormInputContextBadge = React.forwardRef<HTMLButtonElement, Fre
     // Merge refs if both are provided
     const mergedRef = buttonRef || ref
 
-    // Show label in expanded state OR in collapsed state with selection
-    const showLabel = isExpanded || hasSelection
+    // Show label in expanded state OR in collapsed state with selection when requested.
+    const showLabel = isExpanded || (hasSelection && showSelectionLabel)
 
     const button = (
       <button

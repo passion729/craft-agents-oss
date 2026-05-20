@@ -20,7 +20,6 @@ export interface CompactWorkingDirectorySelectorProps {
   workingDirectory?: string
   onWorkingDirectoryChange: (path: string) => void
   sessionFolderPath?: string
-  isEmptySession?: boolean
   workspaceId?: string
 }
 
@@ -39,7 +38,6 @@ export function CompactWorkingDirectorySelector({
   workingDirectory,
   onWorkingDirectoryChange,
   sessionFolderPath,
-  isEmptySession = false,
   workspaceId,
 }: CompactWorkingDirectorySelectorProps) {
   const { t } = useTranslation()
@@ -93,9 +91,9 @@ export function CompactWorkingDirectorySelector({
       <FreeFormInputContextBadge
         icon={<Icon_Home className="h-4 w-4" />}
         label={displayFolderName}
-        isExpanded={isEmptySession}
+        isExpanded={false}
         hasSelection={hasFolder}
-        showChevron={true}
+        showChevron={false}
         isOpen={open}
         onClick={() => setOpen((prev) => !prev)}
         tooltip={
