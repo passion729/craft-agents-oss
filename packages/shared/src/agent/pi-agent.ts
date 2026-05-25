@@ -1222,7 +1222,7 @@ export class PiAgent extends BaseAgent {
             this.eventQueue.enqueue({
               type: 'source_activated' as const,
               sourceSlug,
-              originalMessage: '',
+              originalMessage: this.getCurrentTurnUserMessage() ?? '',
             });
           } catch (err) {
             const reason = sourceExists
