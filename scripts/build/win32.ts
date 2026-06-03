@@ -16,10 +16,18 @@ import type { BuildConfig } from './common';
  */
 export function verifyPackagedSDK(unpackedPath: string): void {
   const appPath = join(unpackedPath, 'resources', 'app');
+  const sdkCorePath = join(
+    appPath,
+    'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs',
+  );
   const binaryPath = join(
     appPath,
     'node_modules', '@anthropic-ai', 'claude-agent-sdk-binary', 'claude.exe',
   );
+
+  if (!existsSync(sdkCorePath)) {
+    throw new Error(`CRITICAL: SDK core not bundled! Expected at: ${sdkCorePath}`);
+  }
 
   if (!existsSync(binaryPath)) {
     throw new Error(`CRITICAL: SDK native binary not bundled! Expected at: ${binaryPath}`);

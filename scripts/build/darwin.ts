@@ -13,10 +13,18 @@ import type { Arch, BuildConfig } from './common';
  */
 export function verifyPackagedSDK(appPath: string, _arch: Arch): void {
   const appResourcesPath = join(appPath, 'Contents', 'Resources', 'app');
+  const sdkCorePath = join(
+    appResourcesPath,
+    'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs',
+  );
   const binaryPath = join(
     appResourcesPath,
     'node_modules', '@anthropic-ai', 'claude-agent-sdk-binary', 'claude',
   );
+
+  if (!existsSync(sdkCorePath)) {
+    throw new Error(`CRITICAL: SDK core not bundled! Expected at: ${sdkCorePath}`);
+  }
 
   if (!existsSync(binaryPath)) {
     throw new Error(`CRITICAL: SDK native binary not bundled! Expected at: ${binaryPath}`);
